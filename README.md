@@ -228,9 +228,63 @@ Logs are stored in `logs/` directory:
 
 Monitor Sunny's actions in your Discord server's #mod-logs channel (auto-created).
 
+## Pushing to GitHub
+
+Before deploying, you'll need to push your code to GitHub:
+
+```bash
+# If you haven't initialized git yet:
+git init
+git remote add origin https://github.com/YOUR-USERNAME/YOUR-REPO.git
+
+# Stage and commit all files
+git add .
+git commit -m "Initial commit: Sunny Discord Bot"
+
+# Push to GitHub
+# You'll need to authenticate with GitHub
+# Option 1: Use GitHub CLI (recommended)
+gh auth login
+git push -u origin master
+
+# Option 2: Use Personal Access Token
+# Create a token at https://github.com/settings/tokens
+# Then use it as your password when prompted
+git push -u origin master
+```
+
+**Important:** Make sure `.env` is in your `.gitignore` file (it should be by default) to keep your tokens secure!
+
 ## Deployment Options
 
-### Option 1: Fly.io (Recommended)
+### Option 1: Render.com (Recommended - Easy Setup)
+
+Free tier with 750 hours/month. **Important:** Free web services spin down after 15 minutes of inactivity and wake up on the next request.
+
+#### Quick Deploy:
+
+1. **Push code to GitHub** (see instructions below)
+2. Go to [Render Dashboard](https://dashboard.render.com/)
+3. Click "New +" → "Web Service"
+4. Connect your GitHub repository
+5. Configure:
+   - **Name:** sunny-bot
+   - **Runtime:** Node
+   - **Build Command:** `npm install`
+   - **Start Command:** `npm start`
+6. Add environment variables:
+   - `DISCORD_TOKEN` (from Discord Developer Portal)
+   - `DISCORD_OWNER_ID` (your Discord user ID)
+   - `DISCORD_SERVER_ID` (your server ID)
+   - `CLAUDE_API_KEY` (from Anthropic Console)
+   - `MODERATION_LEVEL` = `2`
+7. Click "Create Web Service"
+
+The bot includes a health check endpoint at `/health` to keep it alive on Render's free tier.
+
+**Note:** The free tier spins down after 15 minutes of inactivity, which may cause brief delays in bot responses. For 24/7 uptime, upgrade to a paid plan ($7/month).
+
+### Option 2: Fly.io
 
 Free tier includes 3 shared VMs with 256MB RAM each.
 
@@ -256,7 +310,7 @@ fly deploy
 fly logs
 ```
 
-### Option 2: Railway.app
+### Option 3: Railway.app
 
 Free tier includes 500 hours/month.
 
@@ -264,7 +318,7 @@ Free tier includes 500 hours/month.
 2. Add environment variables in dashboard
 3. Deploy automatically on push
 
-### Option 3: VPS (DigitalOcean, Linode, etc.)
+### Option 4: VPS (DigitalOcean, Linode, etc.)
 
 ```bash
 # SSH into server

@@ -3,6 +3,7 @@ const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const winston = require('winston');
+const http = require('http');
 
 // Load environment variables
 dotenv.config();
@@ -108,9 +109,31 @@ process.on('unhandledRejection', (error) => {
     logger.error('Unhandled promise rejection:', error);
 });
 
+// Health check endpoint for Render.com (required for free tier)
+const PORT = process.env.PORT || 3000;
+const server = http.createServer((req, res) => {
+    if (req.url === '/health' || req.url === '/') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            status: 'healthy',
+            uptime: process.uptime(),
+            bot: client.user ? client.user.tag : 'connecting...',
+            servers: client.guilds.cache.size
+        }));
+    } else {
+        res.writeHead(404);
+        res.end();
+    }
+});
+
+server.listen(PORT, () => {
+    logger.info(`🌐 Health check server listening on port ${PORT}`);
+});
+
 // Graceful shutdown
 process.on('SIGINT', async () => {
     logger.info('🛑 Shutting down Sunny...');
+    server.close();
     if (mongoose.connection.readyState === 1) {
         await mongoose.connection.close();
     }
