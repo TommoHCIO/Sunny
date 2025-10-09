@@ -19,6 +19,8 @@ class ActionHandler {
         const authorId = message.author.id;
         const guild = message.guild;
 
+        this.log('🔧', `Executing action: ${action.type} | Details: ${JSON.stringify(action)}`);
+
         try {
             switch (action.type) {
                 // ===== CHANNEL MANAGEMENT =====
@@ -83,8 +85,13 @@ class ActionHandler {
                     // Anyone can request self-assignable roles
                     const roleService = require('../services/roleService');
                     if (action.roleName) {
-                        await roleService.addRole(message.member, action.roleName);
-                        this.log('✅', `Added role ${action.roleName} to ${message.author.tag}`);
+                        const result = await roleService.addRole(message.member, action.roleName);
+                        if (result.success) {
+                            this.log('✅', `Added role ${action.roleName} to ${message.author.tag}`);
+                        } else {
+                            this.log('❌', `Failed to add role ${action.roleName}: ${result.error}`);
+                        }
+                        return result;
                     }
                     break;
 
@@ -177,11 +184,128 @@ class ActionHandler {
                     if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to delete webhook');
                     return await this.deleteWebhook(guild, action);
 
+                // ===== THREAD MANAGEMENT =====
+                case 'CREATE_THREAD':
+                    return await this.createThread(message, action);
+
+                case 'CREATE_FORUM_POST':
+                    return await this.createForumPost(guild, action);
+
+                case 'DELETE_THREAD':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to delete thread');
+                    return await this.deleteThread(guild, action);
+
+                case 'ARCHIVE_THREAD':
+                    return await this.archiveThread(guild, action);
+
+                case 'LOCK_THREAD':
+                    return await this.lockThread(guild, action);
+
+                case 'PIN_THREAD':
+                    return await this.pinThread(guild, action);
+
+                // ===== EMOJI MANAGEMENT =====
+                case 'CREATE_EMOJI':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to create emoji');
+                    return await this.createEmoji(guild, action);
+
+                case 'EDIT_EMOJI':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to edit emoji');
+                    return await this.editEmoji(guild, action);
+
+                case 'DELETE_EMOJI':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to delete emoji');
+                    return await this.deleteEmoji(guild, action);
+
+                // ===== STICKER MANAGEMENT =====
+                case 'CREATE_STICKER':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to create sticker');
+                    return await this.createSticker(guild, action);
+
+                case 'EDIT_STICKER':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to edit sticker');
+                    return await this.editSticker(guild, action);
+
+                case 'DELETE_STICKER':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to delete sticker');
+                    return await this.deleteSticker(guild, action);
+
+                // ===== SCHEDULED EVENTS =====
+                case 'CREATE_EVENT':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to create event');
+                    return await this.createScheduledEvent(guild, action);
+
+                case 'EDIT_EVENT':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to edit event');
+                    return await this.editScheduledEvent(guild, action);
+
+                case 'DELETE_EVENT':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to delete event');
+                    return await this.deleteScheduledEvent(guild, action);
+
+                case 'START_EVENT':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to start event');
+                    return await this.startScheduledEvent(guild, action);
+
+                case 'END_EVENT':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to end event');
+                    return await this.endScheduledEvent(guild, action);
+
+                // ===== ADVANCED VOICE/STAGE =====
+                case 'CREATE_STAGE_CHANNEL':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to create stage channel');
+                    return await this.createStageChannel(guild, action);
+
+                case 'SET_BITRATE':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to set bitrate');
+                    return await this.setBitrate(guild, action);
+
+                case 'SET_USER_LIMIT':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to set user limit');
+                    return await this.setUserLimit(guild, action);
+
+                case 'SET_RTC_REGION':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to set RTC region');
+                    return await this.setRTCRegion(guild, action);
+
+                case 'CREATE_STAGE_INSTANCE':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to create stage instance');
+                    return await this.createStageInstance(guild, action);
+
+                // ===== CHANNEL PERMISSIONS =====
+                case 'SET_CHANNEL_PERMISSIONS':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to set channel permissions');
+                    return await this.setChannelPermissions(guild, action);
+
+                case 'REMOVE_CHANNEL_PERMISSION':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to remove channel permission');
+                    return await this.removeChannelPermission(guild, action);
+
+                case 'SYNC_CHANNEL_PERMISSIONS':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to sync permissions');
+                    return await this.syncChannelPermissions(guild, action);
+
+                // ===== ADVANCED CHANNEL TYPES =====
+                case 'CREATE_FORUM_CHANNEL':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to create forum channel');
+                    return await this.createForumChannel(guild, action);
+
+                case 'SET_DEFAULT_THREAD_SLOWMODE':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to set default thread slowmode');
+                    return await this.setDefaultThreadSlowmode(guild, action);
+
+                case 'SET_AVAILABLE_TAGS':
+                    if (!isOwner(authorId)) return this.log('❌', 'Non-owner tried to set available tags');
+                    return await this.setAvailableTags(guild, action);
+
                 default:
                     this.log('⚠️', `Unknown action type: ${action.type}`);
+                    return { success: false, error: `Unknown action type: ${action.type}` };
             }
         } catch (error) {
-            console.error(`Error executing action ${action.type}:`, error);
+            this.log('❌', `FATAL ERROR executing ${action.type}: ${error.message}`);
+            console.error(`Full error stack for ${action.type}:`, error);
+            return { success: false, error: error.message };
         }
     }
 
@@ -586,6 +710,403 @@ class ActionHandler {
         if (webhook) {
             await webhook.delete();
             this.log('✅', `Deleted webhook: ${webhook.name}`);
+        }
+    }
+
+    // ===== THREAD MANAGEMENT IMPLEMENTATIONS =====
+
+    async createThread(message, action) {
+        const { threadName, autoArchiveDuration, messageContent } = action;
+
+        const thread = await message.channel.threads.create({
+            name: threadName,
+            autoArchiveDuration: parseInt(autoArchiveDuration) || 60,
+            reason: `Created by Sunny for ${message.author.tag}`
+        });
+
+        if (messageContent) {
+            await thread.send(messageContent);
+        }
+
+        this.log('✅', `Created thread: ${threadName}`);
+        return thread;
+    }
+
+    async createForumPost(guild, action) {
+        const { forumChannelName, postName, messageContent, tags } = action;
+
+        const forumChannel = guild.channels.cache.find(c => c.name === forumChannelName && c.isThreadOnly());
+
+        if (forumChannel) {
+            const thread = await forumChannel.threads.create({
+                name: postName,
+                message: { content: messageContent },
+                appliedTags: tags ? tags.split(',') : []
+            });
+
+            this.log('✅', `Created forum post: ${postName}`);
+            return thread;
+        }
+    }
+
+    async deleteThread(guild, action) {
+        const { threadName, threadId } = action;
+
+        const thread = threadId
+            ? await guild.channels.fetch(threadId)
+            : guild.channels.cache.find(c => c.isThread() && c.name === threadName);
+
+        if (thread) {
+            await thread.delete();
+            this.log('✅', `Deleted thread: ${thread.name}`);
+        }
+    }
+
+    async archiveThread(guild, action) {
+        const { threadName, archived } = action;
+
+        const thread = guild.channels.cache.find(c => c.isThread() && c.name === threadName);
+
+        if (thread) {
+            await thread.setArchived(archived === 'true');
+            this.log('✅', `${archived === 'true' ? 'Archived' : 'Unarchived'} thread: ${threadName}`);
+        }
+    }
+
+    async lockThread(guild, action) {
+        const { threadName, locked } = action;
+
+        const thread = guild.channels.cache.find(c => c.isThread() && c.name === threadName);
+
+        if (thread) {
+            await thread.setLocked(locked === 'true');
+            this.log('✅', `${locked === 'true' ? 'Locked' : 'Unlocked'} thread: ${threadName}`);
+        }
+    }
+
+    async pinThread(guild, action) {
+        const { threadName } = action;
+
+        const thread = guild.channels.cache.find(c => c.isThread() && c.name === threadName);
+
+        if (thread && thread.parent?.type === 15) { // 15 = Forum channel
+            await thread.pin();
+            this.log('✅', `Pinned thread: ${threadName}`);
+        }
+    }
+
+    // ===== EMOJI MANAGEMENT IMPLEMENTATIONS =====
+
+    async createEmoji(guild, action) {
+        const { emojiName, emojiUrl, roles } = action;
+
+        const emoji = await guild.emojis.create({
+            attachment: emojiUrl,
+            name: emojiName,
+            roles: roles ? roles.split(',') : []
+        });
+
+        this.log('✅', `Created emoji: ${emojiName}`);
+        return emoji;
+    }
+
+    async editEmoji(guild, action) {
+        const { emojiName, newName } = action;
+
+        const emoji = guild.emojis.cache.find(e => e.name === emojiName);
+
+        if (emoji) {
+            await emoji.edit({ name: newName });
+            this.log('✅', `Renamed emoji: ${emojiName} → ${newName}`);
+        }
+    }
+
+    async deleteEmoji(guild, action) {
+        const { emojiName, emojiId } = action;
+
+        const emoji = emojiId
+            ? guild.emojis.cache.get(emojiId)
+            : guild.emojis.cache.find(e => e.name === emojiName);
+
+        if (emoji) {
+            await emoji.delete();
+            this.log('✅', `Deleted emoji: ${emoji.name}`);
+        }
+    }
+
+    // ===== STICKER MANAGEMENT IMPLEMENTATIONS =====
+
+    async createSticker(guild, action) {
+        const { stickerName, stickerFile, description, emoji } = action;
+
+        const sticker = await guild.stickers.create({
+            file: stickerFile,
+            name: stickerName,
+            tags: emoji || '🍂',
+            description: description || stickerName
+        });
+
+        this.log('✅', `Created sticker: ${stickerName}`);
+        return sticker;
+    }
+
+    async editSticker(guild, action) {
+        const { stickerName, newName, description } = action;
+
+        const sticker = guild.stickers.cache.find(s => s.name === stickerName);
+
+        if (sticker) {
+            await sticker.edit({
+                name: newName || stickerName,
+                description: description
+            });
+            this.log('✅', `Edited sticker: ${stickerName}`);
+        }
+    }
+
+    async deleteSticker(guild, action) {
+        const { stickerName, stickerId } = action;
+
+        const sticker = stickerId
+            ? guild.stickers.cache.get(stickerId)
+            : guild.stickers.cache.find(s => s.name === stickerName);
+
+        if (sticker) {
+            await sticker.delete();
+            this.log('✅', `Deleted sticker: ${sticker.name}`);
+        }
+    }
+
+    // ===== SCHEDULED EVENTS IMPLEMENTATIONS =====
+
+    async createScheduledEvent(guild, action) {
+        const { eventName, description, startTime, endTime, location, channelName } = action;
+
+        const channel = channelName ? guild.channels.cache.find(c => c.name === channelName) : null;
+
+        const event = await guild.scheduledEvents.create({
+            name: eventName,
+            description: description,
+            scheduledStartTime: new Date(startTime),
+            scheduledEndTime: endTime ? new Date(endTime) : null,
+            privacyLevel: 2, // Guild Only
+            entityType: channel ? 2 : 3, // 2 = Voice, 3 = External
+            channel: channel?.id,
+            entityMetadata: location ? { location: location } : undefined
+        });
+
+        this.log('✅', `Created event: ${eventName}`);
+        return event;
+    }
+
+    async editScheduledEvent(guild, action) {
+        const { eventName, newName, description, startTime } = action;
+
+        const event = guild.scheduledEvents.cache.find(e => e.name === eventName);
+
+        if (event) {
+            await event.edit({
+                name: newName || eventName,
+                description: description,
+                scheduledStartTime: startTime ? new Date(startTime) : undefined
+            });
+            this.log('✅', `Edited event: ${eventName}`);
+        }
+    }
+
+    async deleteScheduledEvent(guild, action) {
+        const { eventName, eventId } = action;
+
+        const event = eventId
+            ? guild.scheduledEvents.cache.get(eventId)
+            : guild.scheduledEvents.cache.find(e => e.name === eventName);
+
+        if (event) {
+            await event.delete();
+            this.log('✅', `Deleted event: ${event.name}`);
+        }
+    }
+
+    async startScheduledEvent(guild, action) {
+        const { eventName } = action;
+
+        const event = guild.scheduledEvents.cache.find(e => e.name === eventName);
+
+        if (event) {
+            await event.setStatus(2); // Active
+            this.log('✅', `Started event: ${eventName}`);
+        }
+    }
+
+    async endScheduledEvent(guild, action) {
+        const { eventName } = action;
+
+        const event = guild.scheduledEvents.cache.find(e => e.name === eventName);
+
+        if (event) {
+            await event.setStatus(3); // Completed
+            this.log('✅', `Ended event: ${eventName}`);
+        }
+    }
+
+    // ===== ADVANCED VOICE/STAGE IMPLEMENTATIONS =====
+
+    async createStageChannel(guild, action) {
+        const { channelName, categoryName, topic } = action;
+
+        let parent = null;
+        if (categoryName) {
+            parent = guild.channels.cache.find(c => c.type === 4 && c.name === categoryName);
+        }
+
+        const channel = await guild.channels.create({
+            name: channelName,
+            type: 13, // Stage Channel
+            parent: parent?.id,
+            topic: topic
+        });
+
+        this.log('✅', `Created stage channel: ${channelName}`);
+        return channel;
+    }
+
+    async setBitrate(guild, action) {
+        const { channelName, bitrate } = action;
+
+        const channel = guild.channels.cache.find(c => c.name === channelName && (c.type === 2 || c.type === 13));
+
+        if (channel) {
+            await channel.setBitrate(parseInt(bitrate) * 1000); // Convert to bps
+            this.log('✅', `Set bitrate for ${channelName}: ${bitrate}kbps`);
+        }
+    }
+
+    async setUserLimit(guild, action) {
+        const { channelName, limit } = action;
+
+        const channel = guild.channels.cache.find(c => c.name === channelName && (c.type === 2 || c.type === 13));
+
+        if (channel) {
+            await channel.setUserLimit(parseInt(limit));
+            this.log('✅', `Set user limit for ${channelName}: ${limit}`);
+        }
+    }
+
+    async setRTCRegion(guild, action) {
+        const { channelName, region } = action;
+
+        const channel = guild.channels.cache.find(c => c.name === channelName && (c.type === 2 || c.type === 13));
+
+        if (channel) {
+            await channel.setRTCRegion(region || null); // null = automatic
+            this.log('✅', `Set RTC region for ${channelName}: ${region || 'automatic'}`);
+        }
+    }
+
+    async createStageInstance(guild, action) {
+        const { channelName, topic, privacy } = action;
+
+        const channel = guild.channels.cache.find(c => c.name === channelName && c.type === 13);
+
+        if (channel) {
+            await channel.createStageInstance({
+                topic: topic,
+                privacyLevel: privacy === 'public' ? 1 : 2
+            });
+            this.log('✅', `Started stage in ${channelName}: ${topic}`);
+        }
+    }
+
+    // ===== CHANNEL PERMISSIONS IMPLEMENTATIONS =====
+
+    async setChannelPermissions(guild, action) {
+        const { channelName, targetName, targetType, permissions } = action;
+
+        const channel = guild.channels.cache.find(c => c.name === channelName);
+        const target = targetType === 'role'
+            ? guild.roles.cache.find(r => r.name === targetName)
+            : await guild.members.fetch().then(members => members.find(m => m.user.username === targetName));
+
+        if (channel && target) {
+            const perms = permissions.split(',').reduce((acc, perm) => {
+                acc[perm.trim()] = true;
+                return acc;
+            }, {});
+
+            await channel.permissionOverwrites.create(target, perms);
+            this.log('✅', `Set permissions for ${targetName} in #${channelName}`);
+        }
+    }
+
+    async removeChannelPermission(guild, action) {
+        const { channelName, targetName, targetType } = action;
+
+        const channel = guild.channels.cache.find(c => c.name === channelName);
+        const target = targetType === 'role'
+            ? guild.roles.cache.find(r => r.name === targetName)
+            : await guild.members.fetch().then(members => members.find(m => m.user.username === targetName));
+
+        if (channel && target) {
+            await channel.permissionOverwrites.delete(target);
+            this.log('✅', `Removed permissions for ${targetName} from #${channelName}`);
+        }
+    }
+
+    async syncChannelPermissions(guild, action) {
+        const { channelName } = action;
+
+        const channel = guild.channels.cache.find(c => c.name === channelName);
+
+        if (channel && channel.parent) {
+            await channel.lockPermissions();
+            this.log('✅', `Synced permissions for #${channelName} with category`);
+        }
+    }
+
+    // ===== ADVANCED CHANNEL TYPES IMPLEMENTATIONS =====
+
+    async createForumChannel(guild, action) {
+        const { channelName, categoryName, topic, tags } = action;
+
+        let parent = null;
+        if (categoryName) {
+            parent = guild.channels.cache.find(c => c.type === 4 && c.name === categoryName);
+        }
+
+        const availableTags = tags ? tags.split(',').map(tag => ({ name: tag.trim() })) : [];
+
+        const channel = await guild.channels.create({
+            name: channelName,
+            type: 15, // Forum Channel
+            parent: parent?.id,
+            topic: topic,
+            availableTags: availableTags
+        });
+
+        this.log('✅', `Created forum channel: ${channelName}`);
+        return channel;
+    }
+
+    async setDefaultThreadSlowmode(guild, action) {
+        const { channelName, seconds } = action;
+
+        const channel = guild.channels.cache.find(c => c.name === channelName && c.type === 15);
+
+        if (channel) {
+            await channel.setDefaultThreadRateLimitPerUser(parseInt(seconds));
+            this.log('✅', `Set default thread slowmode for ${channelName}: ${seconds}s`);
+        }
+    }
+
+    async setAvailableTags(guild, action) {
+        const { channelName, tags } = action;
+
+        const channel = guild.channels.cache.find(c => c.name === channelName && c.type === 15);
+
+        if (channel) {
+            const availableTags = tags.split(',').map(tag => ({ name: tag.trim() }));
+            await channel.setAvailableTags(availableTags);
+            this.log('✅', `Set available tags for ${channelName}`);
         }
     }
 
