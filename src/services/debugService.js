@@ -32,21 +32,14 @@ class DebugService {
 
             if (!this.debugChannel) {
                 console.log('📝 Creating sunny-debug channel...');
+                // Create channel without permission overwrites first (simpler, avoids caching issues)
                 this.debugChannel = await this.guild.channels.create({
                     name: 'sunny-debug',
-                    topic: '🔍 Real-time debug logs for Sunny bot',
-                    permissionOverwrites: [
-                        {
-                            id: this.guild.id,
-                            deny: ['ViewChannel'], // Hide from @everyone
-                        },
-                        {
-                            id: this.guild.ownerId,
-                            allow: ['ViewChannel', 'SendMessages'], // Owner can see
-                        },
-                    ],
+                    topic: `🔍 Debug logs for Sunny | Instance: ${this.instanceId} | PID: ${process.pid}`,
                 });
                 console.log('✅ Debug channel created');
+                console.log(`   Instance ID: ${this.instanceId}`);
+                console.log(`   PID: ${process.pid}`);
             }
 
             // Send startup message

@@ -51,6 +51,7 @@ const memberHandler = require('./handlers/memberHandler');
 const errorHandler = require('./handlers/errorHandler');
 const debugService = require('./services/debugService');
 const messageTracker = require('./utils/messageTracker');
+const { detectBotProcesses, logProcessInfo } = require('./utils/processDetector');
 
 // Connect to MongoDB
 if (process.env.MONGODB_URI) {
@@ -73,6 +74,19 @@ if (process.env.MONGODB_URI) {
 client.once('ready', async () => {
     logger.info(`✅ Sunny is online! Logged in as ${client.user.tag}`);
     logger.info(`📊 Serving ${client.guilds.cache.size} server(s)`);
+    
+    // Detect multiple bot instances
+    try {
+        const processes = await detectBotProcesses();
+        logProcessInfo(processes);
+        
+        // Send process info to debug channel
+        const instanceInfo = debugService.getInstanceInfo();
+        logger.info(`🏷️  Instance ID: ${instanceInfo.instanceId}`);
+        logger.info(`🔢 Process ID: ${instanceInfo.pid}`);
+    } catch (error) {
+        logger.error('⚠️  Failed to detect processes:', error);
+    }
     
     // Initialize debug channel
     try {

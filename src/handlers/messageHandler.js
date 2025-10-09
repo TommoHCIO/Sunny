@@ -126,17 +126,27 @@ module.exports = async function handleMessage(client, message) {
 
         // Send response
         if (finalResponse) {
+            // Add instance watermark to track which instance sent this response
+            const instanceInfo = debugService.getInstanceInfo();
+            const watermark = `\n\n-# Instance: \`${instanceInfo.instanceId}\` | PID: \`${instanceInfo.pid}\` | Exec: \`${executionId.substring(0, 8)}\``;
+            const responseWithWatermark = finalResponse + watermark;
+
             await debugService.logMessageFlow('sending', message.id, {
-                'Response': finalResponse.substring(0, 500)
+                'Response': finalResponse.substring(0, 500),
+                'Instance ID': instanceInfo.instanceId,
+                'PID': instanceInfo.pid,
+                'Execution ID': executionId
             }, executionId);
 
             console.log(`💬 Sending reply to Discord...`);
-            const sentMessage = await message.reply(finalResponse);
+            console.log(`   Instance watermark: ${instanceInfo.instanceId} | PID: ${instanceInfo.pid}`);
+            const sentMessage = await message.reply(responseWithWatermark);
             console.log(`✅ Reply sent! Message ID: ${sentMessage.id}`);
 
             await debugService.logMessageFlow('sent', message.id, {
                 'Reply Message ID': sentMessage.id,
-                'Total Time': `${Date.now() - startTime}ms`
+                'Total Time': `${Date.now() - startTime}ms`,
+                'Instance ID': instanceInfo.instanceId
             }, executionId);
 
             // Add Sunny's response to context
