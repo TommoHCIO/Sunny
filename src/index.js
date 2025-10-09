@@ -45,10 +45,12 @@ const client = new Client({
     }
 });
 
-// Import handlers
+// Import handlers and services
 const messageHandler = require('./handlers/messageHandler');
 const memberHandler = require('./handlers/memberHandler');
 const errorHandler = require('./handlers/errorHandler');
+const debugService = require('./services/debugService');
+const messageTracker = require('./utils/messageTracker');
 
 // Connect to MongoDB
 if (process.env.MONGODB_URI) {
@@ -68,15 +70,34 @@ if (process.env.MONGODB_URI) {
 }
 
 // Bot ready event
-client.once('ready', () => {
+client.once('ready', async () => {
     logger.info(`✅ Sunny is online! Logged in as ${client.user.tag}`);
     logger.info(`📊 Serving ${client.guilds.cache.size} server(s)`);
+    
+    // Initialize debug channel
+    try {
+        await debugService.initialize(client);
+        logger.info('🔍 Debug monitoring initialized');
+    } catch (error) {
+        logger.error('⚠️  Failed to initialize debug monitoring:', error);
+    }
     
     // Set bot status
     client.user.setPresence({
         activities: [{ name: 'The Nook 🍂', type: 3 }], // Type 3 = Watching
         status: 'online'
     });
+    
+    // Log stats every 5 minutes
+    setInterval(async () => {
+        try {
+            await debugService.logStats();
+            const trackerStats = messageTracker.getStats();
+            logger.info('📊 Tracker stats:', trackerStats);
+        } catch (error) {
+            logger.error('Failed to log stats:', error);
+        }
+    }, 5 * 60 * 1000);
 });
 
 // Message events
@@ -106,13 +127,42 @@ client.on('guildMemberRemove', async (member) => {
     }
 });
 
-// Error handling
-client.on('error', (error) => {
+// Discord client events (for monitoring)
+client.on('error', async (error) => {
     logger.error('Discord client error:', error);
+    await debugService.logError(error, { source: 'Discord Client' });
 });
 
-process.on('unhandledRejection', (error) => {
+client.on('warn', async (info) => {
+    logger.warn('Discord client warning:', info);
+    await debugService.logEvent('warn', { message: info });
+});
+
+client.on('disconnect', async () => {
+    logger.warn('⚠️  Discord client disconnected');
+    await debugService.logEvent('disconnect', { timestamp: new Date().toISOString() });
+});
+
+client.on('reconnecting', async () => {
+    logger.info('🔄 Discord client reconnecting...');
+    await debugService.logEvent('reconnecting', { timestamp: new Date().toISOString() });
+});
+
+client.on('resume', async () => {
+    logger.info('✅ Discord client resumed');
+    await debugService.logEvent('resume', { timestamp: new Date().toISOString() });
+});
+
+process.on('unhandledRejection', async (error) => {
     logger.error('Unhandled promise rejection:', error);
+    await debugService.logError(error, { source: 'Unhandled Rejection' });
+});
+
+process.on('uncaughtException', async (error) => {
+    logger.error('Uncaught exception:', error);
+    await debugService.logError(error, { source: 'Uncaught Exception' });
+    // Don't exit immediately - give time for log to send
+    setTimeout(() => process.exit(1), 1000);
 });
 
 // Health check endpoint for Render.com (required for free tier)
