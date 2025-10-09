@@ -128,8 +128,15 @@ User message: ${userMessage}`;
 
             if (response.stop_reason === 'end_turn') {
                 // Claude is done - extract and return final text response
+                console.log(`📝 Response content blocks: ${response.content.length}`);
+                response.content.forEach((block, i) => {
+                    console.log(`   Block ${i}: type=${block.type}, length=${block.text?.length || 0}`);
+                });
+
                 const finalText = extractTextFromResponse(response);
                 console.log(`✅ Agent loop complete after ${loopCount} iterations`);
+                console.log(`📤 Final response length: ${finalText.length} chars`);
+                console.log(`📤 Final response preview: ${finalText.substring(0, 100)}...`);
                 return finalText;
             }
 

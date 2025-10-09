@@ -22,6 +22,7 @@ module.exports = async function handleMessage(client, message) {
 
     // Sunny was triggered!
     console.log(`[${triggerResult.type}] ${message.author.tag}: ${message.content}`);
+    console.log(`🔍 Message ID: ${message.id}`);
 
     // Show typing indicator
     await message.channel.sendTyping();
@@ -34,6 +35,7 @@ module.exports = async function handleMessage(client, message) {
             triggerResult.replyContext
         );
 
+        console.log(`🚀 Calling agentService.runAgent...`);
         // Run AI agent with agentic loop
         // The agent will handle tool selection, execution, and multi-step reasoning
         const finalResponse = await agentService.runAgent(
@@ -43,12 +45,20 @@ module.exports = async function handleMessage(client, message) {
             message.guild
         );
 
+        console.log(`📨 Received finalResponse from agent`);
+        console.log(`   Length: ${finalResponse?.length || 0} chars`);
+        console.log(`   Preview: ${finalResponse?.substring(0, 100)}...`);
+
         // Send response
         if (finalResponse) {
+            console.log(`💬 Sending reply to Discord...`);
             const sentMessage = await message.reply(finalResponse);
+            console.log(`✅ Reply sent! Message ID: ${sentMessage.id}`);
 
             // Add Sunny's response to context
             await contextService.addMessage(message.channel.id, sentMessage);
+        } else {
+            console.log(`⚠️  finalResponse was empty/null`);
         }
 
     } catch (error) {
