@@ -5,8 +5,10 @@ Sunny is a friendly AI admin and moderator for The Nook, a cozy autumn-themed Di
 ## Features
 
 - **Natural Conversation**: No slash commands - just talk to Sunny naturally by mentioning "Hey Sunny", using @mentions, or replying to her messages
+- **Advanced AI**: Powered by Claude Sonnet 4.5, the world's best coding model and strongest agent for complex workflows
 - **Admin & Moderator**: Sunny manages the server with owner-authorized actions and autonomous moderation
-- **Role Management**: Self-assignable interest and pronoun roles
+- **75+ Discord Actions**: Complete server management including channels, roles, threads, forums, events, emojis, and permissions
+- **Role Management**: Self-assignable interest and pronoun roles with auto-creation
 - **Conversation Context**: Remembers recent messages for natural, flowing conversations
 - **Permission System**: Owner-only commands for sensitive actions, member-accessible for self-service
 - **Cozy Autumn Vibes**: Warm, welcoming personality that matches The Nook's theme
@@ -365,10 +367,33 @@ pm2 save
 - Sunny's role must be higher than roles she's assigning
 - Check Sunny has "Manage Roles" permission
 
+## AI Model Information
+
+### Claude Sonnet 4.5
+
+Sunny uses **Claude Sonnet 4.5** (released May 2025), Anthropic's most advanced model for agent workflows:
+
+**Why Sonnet 4.5?**
+- 🤖 **Best for Agents**: World's strongest model for building complex agents and tool use
+- 🧠 **Extended Reasoning**: Maintains focus for 30+ hours on multi-step tasks
+- 🎯 **87% Better**: Dramatically improved function calling and action execution accuracy
+- 💰 **Cost Effective**: Same pricing as Claude 3.5 Sonnet ($3/$15 per million tokens)
+- 🔧 **Better Tool Usage**: More reliable Discord action execution with fewer mistakes
+
+**Model Comparison:**
+- Sonnet 4.5: Best for Discord bots (tool use, complex reasoning, agentic workflows)
+- Opus 4.1: More powerful but 5x more expensive - overkill for most Discord bots
+- Claude 3.5: Legacy model, works but less sophisticated action handling
+
+You can change the model in `.env` by setting `CLAUDE_MODEL`, but Sonnet 4.5 is highly recommended for best results.
+
 ## Cost Information
 
 **Discord Bot:** Free
-**Claude API:** Pay-as-you-go (approximately $0.003 per message with caching)
+**Claude API:** Pay-as-you-go
+- Input: $3 per million tokens (~3,000 messages)
+- Output: $15 per million tokens (~15,000 responses)
+- With prompt caching: 90% cost savings on repeated content
 **MongoDB Atlas:** Free tier (512MB storage)
 **Hosting:** Free tier available on Fly.io, Railway, Render
 
