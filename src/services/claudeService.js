@@ -81,7 +81,7 @@ When timing out a user OTHER than the current user, use their actual user ID, no
     
     try {
         const response = await anthropic.messages.create({
-            model: process.env.CLAUDE_MODEL || 'claude-sonnet-4-5-20250514',
+            model: process.env.CLAUDE_MODEL || 'claude-sonnet-4-5-20250929',
             max_tokens: parseInt(process.env.CLAUDE_MAX_TOKENS) || 500,
             temperature: 0.7,
             system: [
