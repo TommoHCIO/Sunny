@@ -1,0 +1,158 @@
+{
+  "serverRules": [
+    {
+      "number": 1,
+      "title": "Be Kind and Respectful",
+      "description": "Treat everyone with kindness and respect. No harassment, hate speech, bullying, or discrimination of any kind.",
+      "severity": "high",
+      "examples": [
+        "Use welcoming language",
+        "Respect different perspectives",
+        "No personal attacks or insults"
+      ]
+    },
+    {
+      "number": 2,
+      "title": "Keep Content Appropriate",
+      "description": "This is a safe, cozy space for all ages. No NSFW content, excessive violence, or disturbing material.",
+      "severity": "high",
+      "examples": [
+        "Keep conversations PG-13",
+        "No graphic content",
+        "Mark spoilers appropriately"
+      ]
+    },
+    {
+      "number": 3,
+      "title": "No Spam or Self-Promotion",
+      "description": "Don't spam messages, links, or images. No unsolicited advertising or self-promotion without permission.",
+      "severity": "medium",
+      "examples": [
+        "No repetitive messages",
+        "No mass-mentioning members",
+        "Ask before sharing your content"
+      ]
+    },
+    {
+      "number": 4,
+      "title": "Use Channels Appropriately",
+      "description": "Keep conversations in the right channels. This helps everyone find what they're looking for.",
+      "severity": "low",
+      "examples": [
+        "Gaming talk in #gaming-lounge",
+        "Art in #creative-corner",
+        "General chat in #general-chat"
+      ]
+    },
+    {
+      "number": 5,
+      "title": "Listen to Moderators",
+      "description": "When Sunny or moderators give guidance, please follow it. We're here to keep the community comfortable for everyone.",
+      "severity": "medium",
+      "examples": [
+        "Accept warnings gracefully",
+        "Don't argue with moderation decisions in public",
+        "DM the owner if you have concerns"
+      ]
+    },
+    {
+      "number": 6,
+      "title": "Protect Privacy",
+      "description": "Don't share personal information about yourself or others. Keep everyone safe.",
+      "severity": "high",
+      "examples": [
+        "No real addresses or phone numbers",
+        "Don't share others' private info",
+        "Be cautious with personal details"
+      ]
+    },
+    {
+      "number": 7,
+      "title": "Have Fun and Be Yourself",
+      "description": "The Nook is your cozy corner of the internet. Relax, be authentic, and enjoy the community!",
+      "severity": "positive",
+      "examples": [
+        "Share your interests",
+        "Join conversations",
+        "Make friends and have fun"
+      ]
+    }
+  ],
+  "moderationGuidelines": {
+    "warnings": {
+      "description": "First-time minor violations or accidental rule breaks",
+      "action": "Verbal warning from Sunny",
+      "escalation": "Two warnings lead to timeout"
+    },
+    "timeouts": {
+      "minor": {
+        "duration": "1-2 hours",
+        "triggers": ["Minor spam", "Off-topic in wrong channel repeatedly", "Two prior warnings"],
+        "message": "Short timeout to cool off and review rules"
+      },
+      "moderate": {
+        "duration": "6-12 hours",
+        "triggers": ["Disrespectful behavior", "Ignoring multiple warnings", "Inappropriate content"],
+        "message": "Time to step back and review community values"
+      },
+      "severe": {
+        "duration": "24 hours",
+        "triggers": ["Harassment", "Repeated rule violations", "Severe disrespect"],
+        "message": "Serious timeout - please review rules carefully"
+      }
+    },
+    "bans": {
+      "description": "Reserved for extreme violations or repeated severe issues",
+      "ownerOnly": true,
+      "triggers": ["Hate speech", "Doxxing", "Severe harassment", "Multiple severe timeouts"],
+      "appealProcess": "DM server owner with appeal"
+    }
+  },
+  "autoModeration": {
+    "spam": {
+      "enabled": true,
+      "thresholds": {
+        "messageRepeat": 3,
+        "timeWindow": 10,
+        "maxMentions": 5
+      },
+      "action": "timeout",
+      "duration": "1h",
+      "deleteMessages": true
+    },
+    "inviteLinks": {
+      "enabled": false,
+      "allowWhitelisted": true,
+      "whitelist": [],
+      "action": "delete"
+    },
+    "capsSpam": {
+      "enabled": true,
+      "threshold": 70,
+      "action": "warn",
+      "message": "Hey, let's ease up on the caps lock! It's easier to read in regular text."
+    }
+  },
+  "communityValues": [
+    {
+      "value": "Inclusivity",
+      "description": "Everyone is welcome here regardless of background, identity, or interests"
+    },
+    {
+      "value": "Kindness",
+      "description": "We support each other and assume good intentions"
+    },
+    {
+      "value": "Respect",
+      "description": "Different perspectives and experiences are valued and respected"
+    },
+    {
+      "value": "Coziness",
+      "description": "This is a safe, comfortable space where you can relax and be yourself"
+    },
+    {
+      "value": "Authenticity",
+      "description": "We encourage genuine connections and real conversations"
+    }
+  ]
+}

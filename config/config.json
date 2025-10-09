@@ -1,0 +1,164 @@
+{
+  "server": {
+    "name": "The Nook",
+    "description": "A cozy autumn-themed community where everyone is included",
+    "theme": "autumn-cozy",
+    "defaultRole": "Member"
+  },
+  "bot": {
+    "name": "Sunny",
+    "status": "online",
+    "activity": {
+      "type": "WATCHING",
+      "message": "over The Nook 🍂"
+    }
+  },
+  "triggers": {
+    "natural": ["hey sunny", "sunny,", "sunny can you", "sunny could you", "sunny would you", "sunny please"],
+    "excludePatterns": ["sunny day", "sunny weather", "sunny outside", "it's sunny", "sunny and", "sunny or"],
+    "caseSensitive": false
+  },
+  "context": {
+    "maxMessages": 10,
+    "retentionMinutes": 60,
+    "includeReplyContext": true
+  },
+  "moderation": {
+    "enabled": true,
+    "autoModeration": true,
+    "maxWarningsBeforeTimeout": 2,
+    "timeoutDurations": {
+      "spam": "1h",
+      "minor": "2h",
+      "moderate": "6h",
+      "severe": "24h"
+    },
+    "autoDeleteSpam": true,
+    "logChannel": "mod-logs"
+  },
+  "roles": {
+    "selfAssignable": [
+      {
+        "name": "Artist",
+        "emoji": "🎨",
+        "description": "For creative folks who love to draw, paint, or design",
+        "grantAccess": ["creative-corner"]
+      },
+      {
+        "name": "Gamer",
+        "emoji": "🎮",
+        "description": "For gaming enthusiasts",
+        "grantAccess": ["gaming-lounge"]
+      },
+      {
+        "name": "Reader/Writer",
+        "emoji": "📚",
+        "description": "For book lovers and writers",
+        "grantAccess": ["library"]
+      },
+      {
+        "name": "Music Lover",
+        "emoji": "🎵",
+        "description": "For music enthusiasts",
+        "grantAccess": ["music-corner"]
+      },
+      {
+        "name": "Movie Buff",
+        "emoji": "🎬",
+        "description": "For film and TV enthusiasts",
+        "grantAccess": ["movie-night"]
+      },
+      {
+        "name": "Night Owl",
+        "emoji": "🦉",
+        "description": "For late-night community members",
+        "grantAccess": []
+      },
+      {
+        "name": "Early Bird",
+        "emoji": "🐦",
+        "description": "For early morning community members",
+        "grantAccess": []
+      },
+      {
+        "name": "Photographer",
+        "emoji": "📷",
+        "description": "For photography enthusiasts",
+        "grantAccess": ["photo-gallery"]
+      },
+      {
+        "name": "Crafter",
+        "emoji": "✂️",
+        "description": "For DIY and crafting enthusiasts",
+        "grantAccess": ["craft-corner"]
+      },
+      {
+        "name": "she/her",
+        "emoji": "💜",
+        "description": "Pronoun role",
+        "grantAccess": []
+      },
+      {
+        "name": "he/him",
+        "emoji": "💙",
+        "description": "Pronoun role",
+        "grantAccess": []
+      },
+      {
+        "name": "they/them",
+        "emoji": "💚",
+        "description": "Pronoun role",
+        "grantAccess": []
+      },
+      {
+        "name": "any pronouns",
+        "emoji": "🧡",
+        "description": "Pronoun role",
+        "grantAccess": []
+      }
+    ],
+    "autoRoles": {
+      "onJoin": ["Member"],
+      "boostRewards": ["Booster"]
+    }
+  },
+  "channels": {
+    "welcome": "welcome",
+    "rules": "rules-and-info",
+    "general": "general-chat",
+    "modLogs": "mod-logs"
+  },
+  "welcomeMessage": {
+    "enabled": true,
+    "sendDM": true,
+    "channelMessage": "Welcome to The Nook, {mention}! 🍂 I'm Sunny, your friendly admin. Make yourself comfortable, grab some roles, and feel free to chat anywhere!",
+    "dmMessage": "Hey there! Welcome to The Nook 🍂\n\nI'm Sunny, the admin here. This is a cozy place where everyone is welcome. Here are some quick tips:\n\n• Check out #rules-and-info to learn about our community\n• Visit #roles to grab some roles and unlock interest channels\n• Jump into #general-chat to say hello!\n• If you ever need help, just @ me or reply to any of my messages\n\nLooking forward to getting to know you!"
+  },
+  "goodbyeMessage": {
+    "enabled": true,
+    "message": "{username} has left The Nook. Thanks for being part of our community! 🍂"
+  },
+  "claude": {
+    "model": "claude-3-5-sonnet-20241022",
+    "maxTokens": 500,
+    "temperature": 0.7,
+    "enableCaching": true,
+    "cacheTimeout": 300
+  },
+  "logging": {
+    "level": "info",
+    "logToFile": true,
+    "logToConsole": true,
+    "logDirectory": "./logs",
+    "logActions": true,
+    "logModeration": true
+  },
+  "features": {
+    "conversationContext": true,
+    "moderationActions": true,
+    "roleManagement": true,
+    "welcomeMessages": true,
+    "replyDetection": true,
+    "naturalTriggers": true
+  }
+}
