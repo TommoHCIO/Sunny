@@ -36,7 +36,13 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildModeration
     ],
-    partials: [Partials.Channel, Partials.Message]
+    partials: [Partials.Channel, Partials.Message],
+    // Disable REST retries to prevent duplicate messages
+    // This fixes the issue where failed API requests are retried but the first request actually succeeded
+    rest: {
+        timeout: 30000,  // 30 second timeout
+        retries: 0       // Disable automatic retries (prevents duplicate messages)
+    }
 });
 
 // Import handlers
