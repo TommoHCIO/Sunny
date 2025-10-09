@@ -47,23 +47,36 @@ async function getResponse(userMessage, conversationContext, author) {
     const isOwner = String(author.id) === String(process.env.DISCORD_OWNER_ID);
     const ownerStatus = isOwner ? ' (SERVER OWNER)' : '';
     
+    // Get current date
+    const currentDate = new Date().toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+
     // Build full prompt
     const fullPrompt = `
 ${conversationContext}
 
+Current date: ${currentDate}
 Current user: ${author.username} (ID: ${author.id})${ownerStatus}
 
 ${isOwner ? 'IMPORTANT: This user is the SERVER OWNER. You can execute owner-only actions like CREATE_CHANNEL, DELETE_CHANNEL, CREATE_CATEGORY, BAN, etc. when they request them.\n\n' : ''}
 Respond to the current message as Sunny. Keep your response concise (2-4 sentences usually) but complete. Include appropriate autumn emojis 🍂🍁☕🧡.
+
+IMPORTANT: Only respond ONCE. Do not provide multiple variations of the same response.
 
 If you need to take actions (add/remove roles, timeout, create/delete channels, etc.), include them in this format:
 [ACTION: TYPE | DETAILS]
 
 Examples:
 [ACTION: ADD_ROLE | roleName: Artist]
-[ACTION: TIMEOUT | userId: ${author.id} | duration: 10 | reason: Spam]
+[ACTION: TIMEOUT | userId: 123456789 | duration: 10 | reason: Spam]
 [ACTION: DELETE_CHANNEL | channelName: general]
 [ACTION: CREATE_CATEGORY | categoryName: WELCOME]
+
+When timing out a user OTHER than the current user, use their actual user ID, not ${author.id}.
     `;
     
     try {
@@ -114,29 +127,32 @@ async function parseResponse(aiResponse) {
     // Extract actions using regex - match complete action tags
     const actionPattern = /\[ACTION: (\w+)([^\]]+)\]/g;
     const matches = [...aiResponse.matchAll(actionPattern)];
-    
+
     for (const match of matches) {
         const actionType = match[1];
         const details = match[2];
-        
+
         // Parse details (format: | key: value | key: value)
         const detailsObj = {};
-        const detailPattern = /\| (\w+): ([^|]+)/g;
+        const detailPattern = /\| (\w+): ([^|\]]+)/g;
         const detailMatches = [...details.matchAll(detailPattern)];
-        
+
         for (const detailMatch of detailMatches) {
             detailsObj[detailMatch[1].trim()] = detailMatch[2].trim();
         }
-        
+
         actions.push({
             type: actionType,
             ...detailsObj
         });
     }
-    
-    // Remove ALL action tags from text using global replace
-    text = text.replace(/\[ACTION:[^\]]+\]/g, '');
-    
+
+    // Remove ALL action tags from text - including incomplete ones
+    text = text.replace(/\[ACTION:[^\]]*\]?/g, '');
+
+    // Also remove any dangling "[ACTION:" that might not have closed
+    text = text.replace(/\[ACTION:[^\[]*$/g, '');
+
     // Clean up multiple newlines and extra whitespace
     text = text.replace(/\n{3,}/g, '\n\n').trim();
     

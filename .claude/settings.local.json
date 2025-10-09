@@ -3,7 +3,11 @@
     "allow": [
       "Bash(npm run dev:*)",
       "Bash(git push:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd Render.com deployment support\n\n- Add health check HTTP endpoint for Render free tier\n- Create render.yaml configuration file\n- Update README with Render.com deployment instructions\n- Add GitHub push instructions to README\n- Health endpoint returns bot status and server count\n\nRender.com free tier requires web services to respond to HTTP requests.\nThe bot now listens on PORT (default 3000) with /health endpoint.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(winget install:*)",
+      "Bash(powershell.exe:*)",
+      "Bash(git --version)"
     ],
     "deny": [],
     "ask": []

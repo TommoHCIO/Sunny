@@ -36,24 +36,25 @@ class ContextService {
     
     async buildContextPrompt(channelId, currentMessage, replyContext = null) {
         const context = await this.getContext(channelId);
-        
+
         let prompt = 'Recent conversation context:\n\n';
-        
-        // Add conversation history
+
+        // Add conversation history with user IDs for moderation actions
         context.forEach(msg => {
-            prompt += `${msg.author}: ${msg.content}\n`;
+            prompt += `${msg.author} (ID: ${msg.authorId}): ${msg.content}\n`;
         });
-        
+
         // Add reply context if applicable
         if (replyContext) {
             prompt += `\n[User is replying to your message: "${replyContext}"]\n`;
         }
-        
+
         // Add current message
         prompt += `\nCurrent message from ${currentMessage.author.username}:\n`;
         prompt += `"${currentMessage.content}"\n\n`;
         prompt += `Respond to this message with full awareness of the conversation context.`;
-        
+        prompt += `\nWhen taking moderation actions, use the correct user ID from the conversation history.`;
+
         return prompt;
     }
     
