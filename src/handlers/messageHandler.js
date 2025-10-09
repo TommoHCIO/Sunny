@@ -3,6 +3,9 @@ const { detectTrigger } = require('../utils/triggerDetection');
 const agentService = require('../services/agentService');
 const contextService = require('../services/contextService');
 
+// Track processed messages to prevent duplicates
+const processedMessages = new Set();
+
 module.exports = async function handleMessage(client, message) {
     // Ignore bot messages (prevent loops)
     if (message.author.bot) return;
@@ -20,9 +23,22 @@ module.exports = async function handleMessage(client, message) {
         return;
     }
 
-    // Sunny was triggered!
+    // Check if we've already processed this message
+    if (processedMessages.has(message.id)) {
+        console.log(`⚠️  DUPLICATE EVENT DETECTED! Already processed message ${message.id}`);
+        return;
+    }
+
+    // Mark as processed
+    processedMessages.add(message.id);
     console.log(`[${triggerResult.type}] ${message.author.tag}: ${message.content}`);
-    console.log(`🔍 Message ID: ${message.id}`);
+    console.log(`🔍 Message ID: ${message.id} [FIRST TIME]`);
+
+    // Clean up old processed messages (keep last 100)
+    if (processedMessages.size > 100) {
+        const first = processedMessages.values().next().value;
+        processedMessages.delete(first);
+    }
 
     // Show typing indicator
     await message.channel.sendTyping();
