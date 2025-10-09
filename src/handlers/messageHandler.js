@@ -5,25 +5,37 @@ const contextService = require('../services/contextService');
 const debugService = require('../services/debugService');
 const messageTracker = require('../utils/messageTracker');
 
+// Bot startup time - used to filter out old messages
+const BOT_START_TIME = Date.now();
+
 module.exports = async function handleMessage(client, message) {
     const executionId = debugService.generateExecutionId();
     const startTime = Date.now();
 
-    // Log EVERY messageCreate event (even if we don't process it)
+    // Ignore bot messages (prevent loops) - do this FIRST before any logging
+    if (message.author.bot) {
+        return; // Silent ignore, no logging
+    }
+
+    // Ignore messages created before bot started (prevents processing old messages on startup)
+    const messageAge = Date.now() - message.createdTimestamp;
+    const botUptime = Date.now() - BOT_START_TIME;
+    if (message.createdTimestamp < BOT_START_TIME && botUptime < 60000) {
+        // Bot has been up less than 60 seconds, and message is older than bot start
+        console.log(`🕰️ Ignoring old message from ${message.author.tag} (created ${Math.floor(messageAge / 1000)}s ago)`);
+        return;
+    }
+
+    // Log messageCreate event for real user messages
     await debugService.logEvent('messageCreate', {
         id: message.id,
         author: message.author,
         channel: message.channel,
         content: message.content,
         isBot: message.author.bot,
-        hasGuild: !!message.guild
+        hasGuild: !!message.guild,
+        messageAge: `${Math.floor(messageAge / 1000)}s`
     }, executionId);
-
-    // Ignore bot messages (prevent loops)
-    if (message.author.bot) {
-        console.log(`🤖 Ignoring bot message from ${message.author.tag}`);
-        return;
-    }
 
     // Ignore DMs for now (can add support later)
     if (!message.guild) {

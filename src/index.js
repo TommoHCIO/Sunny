@@ -200,16 +200,54 @@ server.listen(PORT, () => {
     logger.info(`🌐 Health check server listening on port ${PORT}`);
 });
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-    logger.info('🛑 Shutting down Sunny...');
-    server.close();
+// Graceful shutdown handler
+async function gracefulShutdown(signal) {
+    logger.info(`🛑 Received ${signal}, shutting down gracefully...`);
+    logger.info(`   Instance ID: ${debugService.getInstanceInfo().instanceId}`);
+    logger.info(`   PID: ${process.pid}`);
+    
+    try {
+        // Log shutdown to debug channel
+        await debugService.logEvent('shutdown', {
+            signal,
+            instanceId: debugService.getInstanceInfo().instanceId,
+            pid: process.pid,
+            uptime: process.uptime()
+        });
+    } catch (error) {
+        logger.error('Failed to log shutdown:', error);
+    }
+    
+    // Close HTTP server
+    server.close(() => {
+        logger.info('✅ HTTP server closed');
+    });
+    
+    // Close MongoDB connection
     if (mongoose.connection.readyState === 1) {
         await mongoose.connection.close();
+        logger.info('✅ MongoDB connection closed');
     }
+    
+    // Stop message tracker cleanup
+    messageTracker.stopCleanup();
+    
+    // Destroy Discord client
     client.destroy();
+    logger.info('✅ Discord client destroyed');
+    
+    logger.info('✅ Shutdown complete');
     process.exit(0);
-});
+}
+
+// Handle SIGTERM (Render.com sends this on new deployment)
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+// Handle SIGINT (Ctrl+C)
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle SIGHUP (terminal closed)
+process.on('SIGHUP', () => gracefulShutdown('SIGHUP'));
 
 // Login to Discord
 if (!process.env.DISCORD_TOKEN) {
