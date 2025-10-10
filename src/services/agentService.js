@@ -103,7 +103,7 @@ User message: ${userMessage}`;
 
             // Call Claude with tools
             const response = await anthropic.messages.create({
-                model: process.env.CLAUDE_MODEL || 'claude-sonnet-4-5-20250929',
+                model: process.env.CLAUDE_MODEL || 'claude-3-5-haiku-20241022',
                 max_tokens: parseInt(process.env.CLAUDE_MAX_TOKENS) || 2000,
                 temperature: 0.7,
                 system: [
