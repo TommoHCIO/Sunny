@@ -1,16 +1,19 @@
 // src/utils/permissions.js
 
-const OWNER_ID = process.env.DISCORD_OWNER_ID;
+// Support multiple owners - comma-separated list in env or single ID
+const OWNER_IDS = process.env.DISCORD_OWNER_ID
+    ? process.env.DISCORD_OWNER_ID.split(',').map(id => id.trim())
+    : [];
 
 /**
- * Check if user is the server owner
+ * Check if user is a server owner (supports multiple owners)
  */
 function isOwner(userId) {
-    if (!userId || !OWNER_ID) {
+    if (!userId || OWNER_IDS.length === 0) {
         console.error('Missing user ID or owner ID');
         return false;
     }
-    return String(userId) === String(OWNER_ID);
+    return OWNER_IDS.some(ownerId => String(userId) === String(ownerId));
 }
 
 /**

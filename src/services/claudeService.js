@@ -43,9 +43,10 @@ Keep responses concise (2-4 sentences usually) but complete. Be genuinely helpfu
 async function getResponse(userMessage, conversationContext, author) {
     const personality = await loadPersonality();
     
-    // Check if user is owner
-    const isOwner = String(author.id) === String(process.env.DISCORD_OWNER_ID);
-    const ownerStatus = isOwner ? ' (SERVER OWNER)' : '';
+    // Check if user is owner (supports multiple owners)
+    const { isOwner } = require('../utils/permissions');
+    const isUserOwner = isOwner(author.id);
+    const ownerStatus = isUserOwner ? ' (SERVER OWNER)' : '';
     
     // Get current date
     const currentDate = new Date().toLocaleDateString('en-US', {
