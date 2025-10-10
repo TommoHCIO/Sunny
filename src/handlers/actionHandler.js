@@ -826,10 +826,21 @@ class ActionHandler {
             ? await guild.channels.fetch(threadId)
             : guild.channels.cache.find(c => c.isThread() && c.name === threadName);
 
-        if (thread) {
-            await thread.delete();
-            this.log('✅', `Deleted thread: ${thread.name}`);
+        if (!thread) {
+            return {
+                success: false,
+                error: `Thread "${threadName || threadId}" not found`
+            };
         }
+
+        const name = thread.name;
+        await thread.delete();
+        this.log('✅', `Deleted thread: ${name}`);
+
+        return {
+            success: true,
+            message: `Deleted thread: ${name}`
+        };
     }
 
     async archiveThread(guild, action) {
@@ -837,10 +848,21 @@ class ActionHandler {
 
         const thread = guild.channels.cache.find(c => c.isThread() && c.name === threadName);
 
-        if (thread) {
-            await thread.setArchived(archived === 'true');
-            this.log('✅', `${archived === 'true' ? 'Archived' : 'Unarchived'} thread: ${threadName}`);
+        if (!thread) {
+            return {
+                success: false,
+                error: `Thread "${threadName}" not found`
+            };
         }
+
+        await thread.setArchived(archived === 'true');
+        const status = archived === 'true' ? 'Archived' : 'Unarchived';
+        this.log('✅', `${status} thread: ${threadName}`);
+
+        return {
+            success: true,
+            message: `${status} thread: ${threadName}`
+        };
     }
 
     async lockThread(guild, action) {
@@ -848,10 +870,21 @@ class ActionHandler {
 
         const thread = guild.channels.cache.find(c => c.isThread() && c.name === threadName);
 
-        if (thread) {
-            await thread.setLocked(locked === 'true');
-            this.log('✅', `${locked === 'true' ? 'Locked' : 'Unlocked'} thread: ${threadName}`);
+        if (!thread) {
+            return {
+                success: false,
+                error: `Thread "${threadName}" not found`
+            };
         }
+
+        await thread.setLocked(locked === 'true');
+        const status = locked === 'true' ? 'Locked' : 'Unlocked';
+        this.log('✅', `${status} thread: ${threadName}`);
+
+        return {
+            success: true,
+            message: `${status} thread: ${threadName}`
+        };
     }
 
     async pinThread(guild, action) {
@@ -859,10 +892,27 @@ class ActionHandler {
 
         const thread = guild.channels.cache.find(c => c.isThread() && c.name === threadName);
 
-        if (thread && thread.parent?.type === 15) { // 15 = Forum channel
-            await thread.pin();
-            this.log('✅', `Pinned thread: ${threadName}`);
+        if (!thread) {
+            return {
+                success: false,
+                error: `Thread "${threadName}" not found`
+            };
         }
+
+        if (thread.parent?.type !== 15) { // 15 = Forum channel
+            return {
+                success: false,
+                error: `Thread "${threadName}" is not in a forum channel (only forum threads can be pinned)`
+            };
+        }
+
+        await thread.pin();
+        this.log('✅', `Pinned thread: ${threadName}`);
+
+        return {
+            success: true,
+            message: `Pinned thread: ${threadName}`
+        };
     }
 
     // ===== EMOJI MANAGEMENT IMPLEMENTATIONS =====
