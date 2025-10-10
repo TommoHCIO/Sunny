@@ -8,6 +8,10 @@
 const { ChannelType } = require('discord.js');
 const { isOwner } = require('../utils/permissions');
 const ActionHandler = require('../handlers/actionHandler');
+const serverInspection = require('./serverInspection');
+const memberManagement = require('./memberManagement');
+const advancedModeration = require('./advancedModeration');
+const roleManagement = require('./roleManagement');
 
 // Initialize action handler (singleton pattern)
 let actionHandler = null;
@@ -338,6 +342,67 @@ async function execute(toolName, input, guild, author) {
 
             case 'get_bans':
                 return await getBans(guild, input);
+
+            // ===== SERVER INSPECTION TOOLS (#94-98) =====
+            case 'get_server_info':
+                return await serverInspection.getServerInfo(guild);
+
+            case 'get_server_settings':
+                return await serverInspection.getServerSettings(guild);
+
+            case 'get_current_permissions':
+                return await serverInspection.getCurrentPermissions(guild);
+
+            case 'list_server_features':
+                return await serverInspection.listServerFeatures(guild);
+
+            case 'get_moderation_stats':
+                return await serverInspection.getModerationStats(guild);
+
+            // ===== MEMBER MANAGEMENT TOOLS (#99-103) =====
+            case 'get_member_info':
+                return await memberManagement.getMemberInfo(guild, input);
+
+            case 'get_member_roles':
+                return await memberManagement.getMemberRoles(guild, input);
+
+            case 'get_member_permissions':
+                return await memberManagement.getMemberPermissions(guild, input);
+
+            case 'list_members_with_role':
+                return await memberManagement.listMembersWithRole(guild, input);
+
+            case 'search_members':
+                return await memberManagement.searchMembers(guild, input);
+
+            // ===== ADVANCED MODERATION TOOLS (#104-108) =====
+            case 'list_timeouts':
+                return await advancedModeration.listTimeouts(guild);
+
+            case 'remove_timeout':
+                return await advancedModeration.removeTimeout(guild, input);
+
+            case 'get_audit_log':
+                return await advancedModeration.getAuditLog(guild, input);
+
+            case 'ban_member':
+                return await advancedModeration.banMember(guild, input);
+
+            case 'unban_member':
+                return await advancedModeration.unbanMember(guild, input);
+
+            // ===== ROLE MANAGEMENT TOOLS (#109-112) =====
+            case 'get_role_info':
+                return await roleManagement.getRoleInfo(guild, input);
+
+            case 'get_role_members':
+                return await roleManagement.getRoleMembers(guild, input);
+
+            case 'update_role_permissions':
+                return await roleManagement.updateRolePermissions(guild, input);
+
+            case 'reorder_roles':
+                return await roleManagement.reorderRoles(guild, input);
 
             default:
                 console.error(`❌ Unknown tool: ${toolName}`);

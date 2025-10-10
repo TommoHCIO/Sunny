@@ -1582,6 +1582,304 @@ function getDiscordTools(guild) {
                 properties: {},
                 required: []
             }
+        },
+
+        // ===== SERVER INSPECTION TOOLS (ADVANCED) =====
+        {
+            name: "get_server_info",
+            description: "Get comprehensive server information including name, owner, creation date, member count, boost level, verification level, and features.",
+            input_schema: {
+                type: "object",
+                properties: {},
+                required: []
+            }
+        },
+        {
+            name: "get_server_settings",
+            description: "Get detailed server settings including verification level, content filter, enabled features, channel counts, role counts, and emoji/sticker counts.",
+            input_schema: {
+                type: "object",
+                properties: {},
+                required: []
+            }
+        },
+        {
+            name: "get_current_permissions",
+            description: "Get Sunny's current permissions in the server. Shows all granted and missing permissions, critical missing permissions, and administrator status.",
+            input_schema: {
+                type: "object",
+                properties: {},
+                required: []
+            }
+        },
+        {
+            name: "list_server_features",
+            description: "List all enabled server features (Community, Partnered, Verified, Discoverable, AutoMod, etc.) with descriptions.",
+            input_schema: {
+                type: "object",
+                properties: {},
+                required: []
+            }
+        },
+        {
+            name: "get_moderation_stats",
+            description: "Get moderation statistics including warning counts, active timeouts, and users flagged by the autonomous moderation system.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    timeRange: {
+                        type: "string",
+                        enum: ["24h", "7d", "30d", "all"],
+                        description: "Time range for statistics (default: 24h)"
+                    }
+                },
+                required: []
+            }
+        },
+
+        // ===== MEMBER MANAGEMENT TOOLS (ADVANCED) =====
+        {
+            name: "get_member_info",
+            description: "Get detailed information about a specific member including username, roles, join date, permissions, timeout status, and voice state.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    userId: {
+                        type: "string",
+                        description: "Discord user ID of the member"
+                    }
+                },
+                required: ["userId"]
+            }
+        },
+        {
+            name: "get_member_roles",
+            description: "Get all roles assigned to a member with detailed information including permissions, colors, and positions.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    userId: {
+                        type: "string",
+                        description: "Discord user ID of the member"
+                    }
+                },
+                required: ["userId"]
+            }
+        },
+        {
+            name: "get_member_permissions",
+            description: "Get all permissions for a specific member including key moderation permissions.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    userId: {
+                        type: "string",
+                        description: "Discord user ID of the member"
+                    }
+                },
+                required: ["userId"]
+            }
+        },
+        {
+            name: "list_members_with_role",
+            description: "List all members who have a specific role. Shows username, display name, bot status, join date, and admin status.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    roleId: {
+                        type: "string",
+                        description: "Role ID to search for"
+                    }
+                },
+                required: ["roleId"]
+            }
+        },
+        {
+            name: "search_members",
+            description: "Search for members by username, display name, or nickname. Useful for finding specific users.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    query: {
+                        type: "string",
+                        description: "Search query (partial match)"
+                    },
+                    limit: {
+                        type: "number",
+                        description: "Maximum results to return (default: 25)"
+                    }
+                },
+                required: ["query"]
+            }
+        },
+
+        // ===== ADVANCED MODERATION TOOLS =====
+        {
+            name: "list_timeouts",
+            description: "List all currently timed-out members with their timeout duration and remaining time.",
+            input_schema: {
+                type: "object",
+                properties: {},
+                required: []
+            }
+        },
+        {
+            name: "remove_timeout",
+            description: "Remove an active timeout from a member. Requires Moderate Members permission.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    userId: {
+                        type: "string",
+                        description: "Discord user ID of the member"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Reason for removing timeout (default: 'Timeout removed by Sunny')"
+                    }
+                },
+                required: ["userId"]
+            }
+        },
+        {
+            name: "get_audit_log",
+            description: "Get detailed audit log entries showing recent moderation actions, channel changes, role updates, and more. Can filter by action type and user.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    limit: {
+                        type: "number",
+                        description: "Number of entries to fetch (default: 25)"
+                    },
+                    actionType: {
+                        type: "string",
+                        enum: ["timeout", "kick", "ban", "unban", "role_update", "channel_create", "channel_delete", "message_delete", "member_prune"],
+                        description: "Filter by specific action type"
+                    },
+                    userId: {
+                        type: "string",
+                        description: "Filter by executor user ID"
+                    }
+                },
+                required: []
+            }
+        },
+        {
+            name: "ban_member",
+            description: "Ban a member from the server permanently. Cannot ban server owner or administrators. Requires Ban Members permission.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    userId: {
+                        type: "string",
+                        description: "Discord user ID of the member to ban"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Reason for the ban (default: 'Banned by Sunny')"
+                    },
+                    deleteMessageDays: {
+                        type: "number",
+                        description: "Delete messages from the last N days (0-7, default: 0)"
+                    }
+                },
+                required: ["userId"]
+            }
+        },
+        {
+            name: "unban_member",
+            description: "Remove a ban from a user, allowing them to rejoin. Requires Ban Members permission.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    userId: {
+                        type: "string",
+                        description: "Discord user ID of the banned member"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Reason for unbanning (default: 'Unbanned by Sunny')"
+                    }
+                },
+                required: ["userId"]
+            }
+        },
+
+        // ===== ROLE MANAGEMENT TOOLS (ADVANCED) =====
+        {
+            name: "get_role_info",
+            description: "Get detailed information about a role including permissions, member count, color, position, and whether it's managed or hoisted.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    roleId: {
+                        type: "string",
+                        description: "Role ID to get information about"
+                    }
+                },
+                required: ["roleId"]
+            }
+        },
+        {
+            name: "get_role_members",
+            description: "Get all members who have a specific role with detailed information about each member.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    roleId: {
+                        type: "string",
+                        description: "Role ID to get members for"
+                    }
+                },
+                required: ["roleId"]
+            }
+        },
+        {
+            name: "update_role_permissions",
+            description: "Update permissions for a role. Cannot modify managed roles or roles higher than Sunny's highest role. Requires Manage Roles permission.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    roleId: {
+                        type: "string",
+                        description: "Role ID to update"
+                    },
+                    permissions: {
+                        type: "array",
+                        items: {
+                            type: "string"
+                        },
+                        description: "Array of permission names (e.g., ['ViewChannels', 'SendMessages', 'ModerateMembers'])"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Reason for update (default: 'Updated by Sunny')"
+                    }
+                },
+                required: ["roleId", "permissions"]
+            }
+        },
+        {
+            name: "reorder_roles",
+            description: "Change a role's position in the role hierarchy. Cannot move roles higher than Sunny's highest role. Requires Manage Roles permission.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    roleId: {
+                        type: "string",
+                        description: "Role ID to reorder"
+                    },
+                    newPosition: {
+                        type: "number",
+                        description: "New position in the hierarchy (0 = bottom)"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Reason for reordering (default: 'Role reordered by Sunny')"
+                    }
+                },
+                required: ["roleId", "newPosition"]
+            }
         }
     ];
 }
