@@ -1034,19 +1034,51 @@ class ActionHandler {
         const { channelName, targetName, targetType, permissions } = action;
 
         const channel = guild.channels.cache.find(c => c.name === channelName);
+        if (!channel) {
+            return {
+                success: false,
+                error: `Channel "${channelName}" not found`
+            };
+        }
+
         const target = targetType === 'role'
-            ? guild.roles.cache.find(r => r.name === targetName)
+            ? guild.roles.cache.find(r => r.name === targetName || r.name === `@${targetName}`)
             : await guild.members.fetch().then(members => members.find(m => m.user.username === targetName));
 
-        if (channel && target) {
-            const perms = permissions.split(',').reduce((acc, perm) => {
-                acc[perm.trim()] = true;
-                return acc;
-            }, {});
-
-            await channel.permissionOverwrites.create(target, perms);
-            this.log('✅', `Set permissions for ${targetName} in #${channelName}`);
+        if (!target) {
+            return {
+                success: false,
+                error: `${targetType === 'role' ? 'Role' : 'Member'} "${targetName}" not found`
+            };
         }
+
+        // Parse permissions - format can be:
+        // "ViewChannel,SendMessages" (allow these)
+        // "ViewChannel:false,SendMessages:false" (deny these)
+        // "" (empty = deny all/reset)
+        const perms = {};
+        if (permissions && permissions.trim()) {
+            permissions.split(',').forEach(perm => {
+                const trimmed = perm.trim();
+                if (trimmed.includes(':')) {
+                    const [key, value] = trimmed.split(':');
+                    perms[key.trim()] = value.trim().toLowerCase() === 'true';
+                } else {
+                    perms[trimmed] = true;
+                }
+            });
+        } else {
+            // Empty permissions = deny ViewChannel
+            perms.ViewChannel = false;
+        }
+
+        await channel.permissionOverwrites.edit(target, perms);
+        this.log('✅', `Set permissions for ${targetName} in #${channelName}`);
+
+        return {
+            success: true,
+            message: `Set permissions for ${targetName} in #${channelName}`
+        };
     }
 
     async removeChannelPermission(guild, action) {
