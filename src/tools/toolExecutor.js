@@ -912,8 +912,29 @@ async function addReaction(guild, input) {
             return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
         }
 
-        const message = await channel.messages.fetch(input.messageId);
-        await message.react(input.emoji);
+        // Try to fetch the message with better error handling
+        let message;
+        try {
+            message = await channel.messages.fetch(input.messageId);
+        } catch (fetchError) {
+            if (fetchError.code === 10008) {
+                return { success: false, error: `Message ${input.messageId} not found in #${channel.name}. The message may have been deleted or the ID is incorrect.` };
+            }
+            return { success: false, error: `Could not fetch message: ${fetchError.message} (Code: ${fetchError.code || 'unknown'})` };
+        }
+
+        // Try to add the reaction
+        try {
+            await message.react(input.emoji);
+        } catch (reactError) {
+            if (reactError.code === 10014) {
+                return { success: false, error: `Invalid emoji: "${input.emoji}". Use Unicode emojis (like ✅) or custom emoji names from this server.` };
+            }
+            if (reactError.code === 50013) {
+                return { success: false, error: `Missing permissions to add reactions in #${channel.name}. Bot needs "Add Reactions" permission.` };
+            }
+            return { success: false, error: `Failed to add reaction: ${reactError.message} (Code: ${reactError.code || 'unknown'})` };
+        }
 
         return {
             success: true,
