@@ -947,7 +947,13 @@ class ActionHandler {
         });
 
         this.log('✅', `Created emoji: ${emojiName}`);
-        return emoji;
+
+        return {
+            success: true,
+            message: `Created emoji: ${emojiName}`,
+            emoji_id: emoji.id,
+            emoji_name: emoji.name
+        };
     }
 
     async editEmoji(guild, action) {
@@ -955,10 +961,20 @@ class ActionHandler {
 
         const emoji = guild.emojis.cache.find(e => e.name === emojiName);
 
-        if (emoji) {
-            await emoji.edit({ name: newName });
-            this.log('✅', `Renamed emoji: ${emojiName} → ${newName}`);
+        if (!emoji) {
+            return {
+                success: false,
+                error: `Emoji "${emojiName}" not found`
+            };
         }
+
+        await emoji.edit({ name: newName });
+        this.log('✅', `Renamed emoji: ${emojiName} → ${newName}`);
+
+        return {
+            success: true,
+            message: `Renamed emoji: ${emojiName} → ${newName}`
+        };
     }
 
     async deleteEmoji(guild, action) {
@@ -968,10 +984,21 @@ class ActionHandler {
             ? guild.emojis.cache.get(emojiId)
             : guild.emojis.cache.find(e => e.name === emojiName);
 
-        if (emoji) {
-            await emoji.delete();
-            this.log('✅', `Deleted emoji: ${emoji.name}`);
+        if (!emoji) {
+            return {
+                success: false,
+                error: `Emoji "${emojiName || emojiId}" not found`
+            };
         }
+
+        const name = emoji.name;
+        await emoji.delete();
+        this.log('✅', `Deleted emoji: ${name}`);
+
+        return {
+            success: true,
+            message: `Deleted emoji: ${name}`
+        };
     }
 
     // ===== STICKER MANAGEMENT IMPLEMENTATIONS =====
@@ -987,7 +1014,13 @@ class ActionHandler {
         });
 
         this.log('✅', `Created sticker: ${stickerName}`);
-        return sticker;
+
+        return {
+            success: true,
+            message: `Created sticker: ${stickerName}`,
+            sticker_id: sticker.id,
+            sticker_name: sticker.name
+        };
     }
 
     async editSticker(guild, action) {
@@ -995,13 +1028,23 @@ class ActionHandler {
 
         const sticker = guild.stickers.cache.find(s => s.name === stickerName);
 
-        if (sticker) {
-            await sticker.edit({
-                name: newName || stickerName,
-                description: description
-            });
-            this.log('✅', `Edited sticker: ${stickerName}`);
+        if (!sticker) {
+            return {
+                success: false,
+                error: `Sticker "${stickerName}" not found`
+            };
         }
+
+        await sticker.edit({
+            name: newName || stickerName,
+            description: description
+        });
+        this.log('✅', `Edited sticker: ${stickerName}`);
+
+        return {
+            success: true,
+            message: `Edited sticker: ${stickerName}`
+        };
     }
 
     async deleteSticker(guild, action) {
@@ -1011,10 +1054,21 @@ class ActionHandler {
             ? guild.stickers.cache.get(stickerId)
             : guild.stickers.cache.find(s => s.name === stickerName);
 
-        if (sticker) {
-            await sticker.delete();
-            this.log('✅', `Deleted sticker: ${sticker.name}`);
+        if (!sticker) {
+            return {
+                success: false,
+                error: `Sticker "${stickerName || stickerId}" not found`
+            };
         }
+
+        const name = sticker.name;
+        await sticker.delete();
+        this.log('✅', `Deleted sticker: ${name}`);
+
+        return {
+            success: true,
+            message: `Deleted sticker: ${name}`
+        };
     }
 
     // ===== SCHEDULED EVENTS IMPLEMENTATIONS =====
