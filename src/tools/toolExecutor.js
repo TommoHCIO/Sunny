@@ -531,13 +531,39 @@ async function getChannelInfo(guild, input) {
 
 async function assignRole(guild, author, input) {
     const roleService = require('../services/roleService');
+    const { isOwner } = require('../utils/permissions');
     const targetUserId = input.userId || author.id;
 
     try {
         // Get the member
         const member = await guild.members.fetch(targetUserId);
 
-        // Use existing roleService
+        // If owner is requesting, bypass self-assignable check
+        if (isOwner(author.id)) {
+            const role = guild.roles.cache.find(r => r.name.toLowerCase() === input.roleName.toLowerCase());
+
+            if (!role) {
+                return {
+                    success: false,
+                    error: `Role "${input.roleName}" not found`
+                };
+            }
+
+            if (member.roles.cache.has(role.id)) {
+                return {
+                    success: false,
+                    error: `${member.user.username} already has the ${input.roleName} role`
+                };
+            }
+
+            await member.roles.add(role);
+            return {
+                success: true,
+                message: `Added ${input.roleName} role to ${member.user.username}`
+            };
+        }
+
+        // For non-owners, use roleService (self-assignable roles only)
         const result = await roleService.addRole(member, input.roleName);
 
         if (result.success) {
@@ -561,10 +587,38 @@ async function assignRole(guild, author, input) {
 
 async function removeRole(guild, author, input) {
     const roleService = require('../services/roleService');
+    const { isOwner } = require('../utils/permissions');
     const targetUserId = input.userId || author.id;
 
     try {
         const member = await guild.members.fetch(targetUserId);
+
+        // If owner is requesting, bypass self-assignable check
+        if (isOwner(author.id)) {
+            const role = guild.roles.cache.find(r => r.name.toLowerCase() === input.roleName.toLowerCase());
+
+            if (!role) {
+                return {
+                    success: false,
+                    error: `Role "${input.roleName}" not found`
+                };
+            }
+
+            if (!member.roles.cache.has(role.id)) {
+                return {
+                    success: false,
+                    error: `${member.user.username} doesn't have the ${input.roleName} role`
+                };
+            }
+
+            await member.roles.remove(role);
+            return {
+                success: true,
+                message: `Removed ${input.roleName} role from ${member.user.username}`
+            };
+        }
+
+        // For non-owners, use roleService (self-assignable roles only)
         const result = await roleService.removeRole(member, input.roleName);
 
         if (result.success) {

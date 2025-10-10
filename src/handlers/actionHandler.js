@@ -496,38 +496,70 @@ class ActionHandler {
 
     async deleteRole(guild, action) {
         const { roleName, roleId } = action;
-        
-        const role = roleId 
+
+        const role = roleId
             ? guild.roles.cache.get(roleId)
             : guild.roles.cache.find(r => r.name === roleName);
-            
-        if (role) {
-            await role.delete();
-            this.log('✅', `Deleted role: ${role.name}`);
+
+        if (!role) {
+            return {
+                success: false,
+                error: `Role "${roleName || roleId}" not found`
+            };
         }
+
+        const name = role.name;
+        await role.delete();
+        this.log('✅', `Deleted role: ${name}`);
+
+        return {
+            success: true,
+            message: `Deleted role: ${name}`
+        };
     }
 
     async renameRole(guild, action) {
         const { oldName, newName, roleId } = action;
-        
-        const role = roleId 
+
+        const role = roleId
             ? guild.roles.cache.get(roleId)
             : guild.roles.cache.find(r => r.name === oldName);
-            
-        if (role) {
-            await role.setName(newName);
-            this.log('✅', `Renamed role: ${oldName} → ${newName}`);
+
+        if (!role) {
+            return {
+                success: false,
+                error: `Role "${oldName || roleId}" not found`
+            };
         }
+
+        await role.setName(newName);
+        this.log('✅', `Renamed role: ${oldName} → ${newName}`);
+
+        return {
+            success: true,
+            message: `Renamed role: ${oldName} → ${newName}`
+        };
     }
 
     async setRoleColor(guild, action) {
         const { roleName, color } = action;
-        
+
         const role = guild.roles.cache.find(r => r.name === roleName);
-        if (role) {
-            await role.setColor(color);
-            this.log('✅', `Set color for role ${roleName}`);
+
+        if (!role) {
+            return {
+                success: false,
+                error: `Role "${roleName}" not found`
+            };
         }
+
+        await role.setColor(color);
+        this.log('✅', `Set color for role ${roleName}`);
+
+        return {
+            success: true,
+            message: `Set color for role ${roleName} to ${color}`
+        };
     }
 
     async setRolePermissions(guild, action) {
