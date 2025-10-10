@@ -702,30 +702,50 @@ class ActionHandler {
 
     async setServerName(guild, action) {
         const { name } = action;
-        
+
         await guild.setName(name);
         this.log('✅', `Set server name: ${name}`);
+
+        return {
+            success: true,
+            message: `Set server name to: ${name}`
+        };
     }
 
     async setServerIcon(guild, action) {
         const { iconUrl } = action;
-        
+
         await guild.setIcon(iconUrl);
         this.log('✅', `Set server icon`);
+
+        return {
+            success: true,
+            message: `Set server icon to: ${iconUrl}`
+        };
     }
 
     async setServerBanner(guild, action) {
         const { bannerUrl } = action;
-        
+
         await guild.setBanner(bannerUrl);
         this.log('✅', `Set server banner`);
+
+        return {
+            success: true,
+            message: `Set server banner to: ${bannerUrl}`
+        };
     }
 
     async setVerificationLevel(guild, action) {
         const { level } = action;
-        
+
         await guild.setVerificationLevel(parseInt(level));
         this.log('✅', `Set verification level: ${level}`);
+
+        return {
+            success: true,
+            message: `Set verification level to: ${level}`
+        };
     }
 
     // ===== INVITE MANAGEMENT IMPLEMENTATIONS =====
