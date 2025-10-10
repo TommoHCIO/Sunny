@@ -338,15 +338,26 @@ class ActionHandler {
 
     async deleteChannel(guild, action) {
         const { channelName, channelId } = action;
-        
-        const channel = channelId 
+
+        const channel = channelId
             ? guild.channels.cache.get(channelId)
             : guild.channels.cache.find(c => c.name === channelName);
-            
-        if (channel) {
-            await channel.delete();
-            this.log('✅', `Deleted channel: #${channel.name}`);
+
+        if (!channel) {
+            return {
+                success: false,
+                error: `Channel "${channelName || channelId}" not found`
+            };
         }
+
+        const name = channel.name;
+        await channel.delete();
+        this.log('✅', `Deleted channel: #${name}`);
+
+        return {
+            success: true,
+            message: `Deleted channel: #${name}`
+        };
     }
 
     async renameChannel(guild, action) {
