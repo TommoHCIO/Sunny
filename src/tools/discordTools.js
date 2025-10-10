@@ -1476,7 +1476,7 @@ function getDiscordTools(guild) {
         // ===== AUTOMODERATION TOOLS =====
         {
             name: "create_automod_rule",
-            description: "Create an AutoMod rule to automatically filter spam, harmful links, or custom keywords. Requires owner permissions.",
+            description: "Create an AutoMod rule to automatically filter spam, harmful links, or custom keywords. For keyword type, provide keywords as array like [\"spam\", \"bad\"]. Requires owner permissions.",
             input_schema: {
                 type: "object",
                 properties: {
@@ -1487,24 +1487,27 @@ function getDiscordTools(guild) {
                     triggerType: {
                         type: "string",
                         enum: ["keyword", "spam", "mention_spam", "harmful_link"],
-                        description: "Type of content to filter"
+                        description: "Type: keyword (needs keywords array), spam (auto-detect), mention_spam (needs mentionLimit), harmful_link (auto-detect)"
                     },
                     keywords: {
                         type: "array",
-                        description: "For keyword type: Array of words/phrases to block"
+                        items: {
+                            type: "string"
+                        },
+                        description: "REQUIRED for keyword type: Array of words/phrases to block, e.g. [\"spam\", \"badword\"]"
                     },
                     mentionLimit: {
                         type: "number",
-                        description: "For mention_spam: Max mentions allowed per message"
+                        description: "REQUIRED for mention_spam type: Max mentions allowed (e.g. 5)"
                     },
                     action: {
                         type: "string",
                         enum: ["block", "timeout", "alert"],
-                        description: "Action to take when rule triggers"
+                        description: "Action: block (delete message), timeout (60s timeout), alert (send to channel)"
                     },
                     alertChannelName: {
                         type: "string",
-                        description: "Channel to send alerts to"
+                        description: "REQUIRED for alert action: Channel name to send alerts to"
                     }
                 },
                 required: ["ruleName", "triggerType", "action"]
