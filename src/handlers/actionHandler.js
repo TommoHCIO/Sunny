@@ -1353,10 +1353,20 @@ class ActionHandler {
 
         const channel = guild.channels.cache.find(c => c.name === channelName && (c.type === 2 || c.type === 13));
 
-        if (channel) {
-            await channel.setBitrate(parseInt(bitrate) * 1000); // Convert to bps
-            this.log('✅', `Set bitrate for ${channelName}: ${bitrate}kbps`);
+        if (!channel) {
+            return {
+                success: false,
+                error: `Voice/Stage channel "${channelName}" not found`
+            };
         }
+
+        await channel.setBitrate(parseInt(bitrate) * 1000); // Convert to bps
+        this.log('✅', `Set bitrate for ${channelName}: ${bitrate}kbps`);
+
+        return {
+            success: true,
+            message: `Set bitrate for ${channelName}: ${bitrate}kbps`
+        };
     }
 
     async setUserLimit(guild, action) {
@@ -1364,10 +1374,20 @@ class ActionHandler {
 
         const channel = guild.channels.cache.find(c => c.name === channelName && (c.type === 2 || c.type === 13));
 
-        if (channel) {
-            await channel.setUserLimit(parseInt(limit));
-            this.log('✅', `Set user limit for ${channelName}: ${limit}`);
+        if (!channel) {
+            return {
+                success: false,
+                error: `Voice/Stage channel "${channelName}" not found`
+            };
         }
+
+        await channel.setUserLimit(parseInt(limit));
+        this.log('✅', `Set user limit for ${channelName}: ${limit}`);
+
+        return {
+            success: true,
+            message: `Set user limit for ${channelName}: ${limit}`
+        };
     }
 
     async setRTCRegion(guild, action) {
@@ -1375,10 +1395,20 @@ class ActionHandler {
 
         const channel = guild.channels.cache.find(c => c.name === channelName && (c.type === 2 || c.type === 13));
 
-        if (channel) {
-            await channel.setRTCRegion(region || null); // null = automatic
-            this.log('✅', `Set RTC region for ${channelName}: ${region || 'automatic'}`);
+        if (!channel) {
+            return {
+                success: false,
+                error: `Voice/Stage channel "${channelName}" not found`
+            };
         }
+
+        await channel.setRTCRegion(region || null); // null = automatic
+        this.log('✅', `Set RTC region for ${channelName}: ${region || 'automatic'}`);
+
+        return {
+            success: true,
+            message: `Set RTC region for ${channelName}: ${region || 'automatic'}`
+        };
     }
 
     async createStageInstance(guild, action) {
@@ -1386,13 +1416,23 @@ class ActionHandler {
 
         const channel = guild.channels.cache.find(c => c.name === channelName && c.type === 13);
 
-        if (channel) {
-            await channel.createStageInstance({
-                topic: topic,
-                privacyLevel: privacy === 'public' ? 1 : 2
-            });
-            this.log('✅', `Started stage in ${channelName}: ${topic}`);
+        if (!channel) {
+            return {
+                success: false,
+                error: `Stage channel "${channelName}" not found`
+            };
         }
+
+        await channel.createStageInstance({
+            topic: topic,
+            privacyLevel: privacy === 'public' ? 1 : 2
+        });
+        this.log('✅', `Started stage in ${channelName}: ${topic}`);
+
+        return {
+            success: true,
+            message: `Started stage in ${channelName}: ${topic}`
+        };
     }
 
     // ===== CHANNEL PERMISSIONS IMPLEMENTATIONS =====
@@ -1452,14 +1492,31 @@ class ActionHandler {
         const { channelName, targetName, targetType } = action;
 
         const channel = guild.channels.cache.find(c => c.name === channelName);
+        if (!channel) {
+            return {
+                success: false,
+                error: `Channel "${channelName}" not found`
+            };
+        }
+
         const target = targetType === 'role'
             ? guild.roles.cache.find(r => r.name === targetName)
             : await guild.members.fetch().then(members => members.find(m => m.user.username === targetName));
 
-        if (channel && target) {
-            await channel.permissionOverwrites.delete(target);
-            this.log('✅', `Removed permissions for ${targetName} from #${channelName}`);
+        if (!target) {
+            return {
+                success: false,
+                error: `${targetType === 'role' ? 'Role' : 'Member'} "${targetName}" not found`
+            };
         }
+
+        await channel.permissionOverwrites.delete(target);
+        this.log('✅', `Removed permissions for ${targetName} from #${channelName}`);
+
+        return {
+            success: true,
+            message: `Removed permissions for ${targetName} from #${channelName}`
+        };
     }
 
     async syncChannelPermissions(guild, action) {
@@ -1467,10 +1524,27 @@ class ActionHandler {
 
         const channel = guild.channels.cache.find(c => c.name === channelName);
 
-        if (channel && channel.parent) {
-            await channel.lockPermissions();
-            this.log('✅', `Synced permissions for #${channelName} with category`);
+        if (!channel) {
+            return {
+                success: false,
+                error: `Channel "${channelName}" not found`
+            };
         }
+
+        if (!channel.parent) {
+            return {
+                success: false,
+                error: `Channel "${channelName}" is not in a category`
+            };
+        }
+
+        await channel.lockPermissions();
+        this.log('✅', `Synced permissions for #${channelName} with category`);
+
+        return {
+            success: true,
+            message: `Synced permissions for #${channelName} with category`
+        };
     }
 
     // ===== ADVANCED CHANNEL TYPES IMPLEMENTATIONS =====
@@ -1502,10 +1576,20 @@ class ActionHandler {
 
         const channel = guild.channels.cache.find(c => c.name === channelName && c.type === 15);
 
-        if (channel) {
-            await channel.setDefaultThreadRateLimitPerUser(parseInt(seconds));
-            this.log('✅', `Set default thread slowmode for ${channelName}: ${seconds}s`);
+        if (!channel) {
+            return {
+                success: false,
+                error: `Forum channel "${channelName}" not found`
+            };
         }
+
+        await channel.setDefaultThreadRateLimitPerUser(parseInt(seconds));
+        this.log('✅', `Set default thread slowmode for ${channelName}: ${seconds}s`);
+
+        return {
+            success: true,
+            message: `Set default thread slowmode for ${channelName}: ${seconds}s`
+        };
     }
 
     async setAvailableTags(guild, action) {
@@ -1513,11 +1597,21 @@ class ActionHandler {
 
         const channel = guild.channels.cache.find(c => c.name === channelName && c.type === 15);
 
-        if (channel) {
-            const availableTags = tags.split(',').map(tag => ({ name: tag.trim() }));
-            await channel.setAvailableTags(availableTags);
-            this.log('✅', `Set available tags for ${channelName}`);
+        if (!channel) {
+            return {
+                success: false,
+                error: `Forum channel "${channelName}" not found`
+            };
         }
+
+        const availableTags = tags.split(',').map(tag => ({ name: tag.trim() }));
+        await channel.setAvailableTags(availableTags);
+        this.log('✅', `Set available tags for ${channelName}`);
+
+        return {
+            success: true,
+            message: `Set available tags for ${channelName}`
+        };
     }
 
     // ===== UTILITY METHODS =====
