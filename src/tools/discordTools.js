@@ -591,6 +591,15 @@ function getDiscordTools(guild) {
 
         // ===== EMOJI & STICKER TOOLS =====
         {
+            name: "list_emojis",
+            description: "List all custom emojis in the server.",
+            input_schema: {
+                type: "object",
+                properties: {},
+                required: []
+            }
+        },
+        {
             name: "create_emoji",
             description: "Create a custom emoji for the server. Requires owner permissions.",
             input_schema: {
@@ -620,6 +629,15 @@ function getDiscordTools(guild) {
                     }
                 },
                 required: ["emojiName"]
+            }
+        },
+        {
+            name: "list_stickers",
+            description: "List all custom stickers in the server.",
+            input_schema: {
+                type: "object",
+                properties: {},
+                required: []
             }
         },
 

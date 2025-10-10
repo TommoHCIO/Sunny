@@ -166,11 +166,17 @@ async function execute(toolName, input, guild, author) {
                 return await deleteScheduledEvent(guild, input);
 
             // ===== EMOJI MANAGEMENT =====
+            case 'list_emojis':
+                return await listEmojis(guild, input);
+
             case 'create_emoji':
                 return await actionHandler.createEmoji(guild, input);
 
             case 'delete_emoji':
                 return await deleteEmoji(guild, input);
+
+            case 'list_stickers':
+                return await listStickers(guild, input);
 
             case 'edit_emoji':
                 return await actionHandler.editEmoji(guild, input);
@@ -1064,6 +1070,50 @@ async function listWebhooks(guild, input) {
         };
     } catch (error) {
         return { success: false, error: `Failed to list webhooks: ${error.message}` };
+    }
+}
+
+async function listEmojis(guild, input) {
+    try {
+        const emojis = guild.emojis.cache;
+        const emojiList = emojis.map(e => ({
+            id: e.id,
+            name: e.name,
+            animated: e.animated,
+            url: e.url,
+            created_by: e.author?.username || 'Unknown'
+        }));
+
+        return {
+            success: true,
+            emojis: emojiList,
+            total: emojiList.length,
+            message: emojiList.length === 0 ? 'No custom emojis in this server' : `Found ${emojiList.length} custom emoji(s)`
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to list emojis: ${error.message}` };
+    }
+}
+
+async function listStickers(guild, input) {
+    try {
+        const stickers = guild.stickers.cache;
+        const stickerList = stickers.map(s => ({
+            id: s.id,
+            name: s.name,
+            description: s.description || 'No description',
+            tags: s.tags || 'None',
+            url: s.url
+        }));
+
+        return {
+            success: true,
+            stickers: stickerList,
+            total: stickerList.length,
+            message: stickerList.length === 0 ? 'No custom stickers in this server' : `Found ${stickerList.length} custom sticker(s)`
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to list stickers: ${error.message}` };
     }
 }
 
