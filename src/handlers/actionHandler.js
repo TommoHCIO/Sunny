@@ -895,55 +895,101 @@ class ActionHandler {
 
     async createInvite(message, action) {
         const { maxAge, maxUses, temporary } = action;
-        
+
         const invite = await message.channel.createInvite({
             maxAge: maxAge ? parseInt(maxAge) : 0,
             maxUses: maxUses ? parseInt(maxUses) : 0,
             temporary: temporary === 'true'
         });
-        
+
         this.log('✅', `Created invite: ${invite.code}`);
-        return invite;
+
+        return {
+            success: true,
+            message: `Created invite: https://discord.gg/${invite.code}`,
+            invite_code: invite.code,
+            invite_url: `https://discord.gg/${invite.code}`
+        };
     }
 
     async deleteInvite(guild, action) {
         const { inviteCode } = action;
-        
+
         const invites = await guild.invites.fetch();
         const invite = invites.find(i => i.code === inviteCode);
-        
-        if (invite) {
-            await invite.delete();
-            this.log('✅', `Deleted invite: ${inviteCode}`);
+
+        if (!invite) {
+            return {
+                success: false,
+                error: `Invite with code "${inviteCode}" not found`
+            };
         }
+
+        await invite.delete();
+        this.log('✅', `Deleted invite: ${inviteCode}`);
+
+        return {
+            success: true,
+            message: `Deleted invite: ${inviteCode}`
+        };
     }
 
     // ===== WEBHOOK MANAGEMENT IMPLEMENTATIONS =====
 
     async createWebhook(guild, action) {
         const { channelName, webhookName, avatarUrl } = action;
-        
+
         const channel = guild.channels.cache.find(c => c.name === channelName);
-        if (channel && channel.createWebhook) {
-            const webhook = await channel.createWebhook({
-                name: webhookName,
-                avatar: avatarUrl || undefined
-            });
-            this.log('✅', `Created webhook: ${webhookName}`);
-            return webhook;
+
+        if (!channel) {
+            return {
+                success: false,
+                error: `Channel "${channelName}" not found`
+            };
         }
+
+        if (!channel.createWebhook) {
+            return {
+                success: false,
+                error: `Channel "${channelName}" does not support webhooks`
+            };
+        }
+
+        const webhook = await channel.createWebhook({
+            name: webhookName,
+            avatar: avatarUrl || undefined
+        });
+        this.log('✅', `Created webhook: ${webhookName}`);
+
+        return {
+            success: true,
+            message: `Created webhook: ${webhookName}`,
+            webhook_id: webhook.id,
+            webhook_url: webhook.url
+        };
     }
 
     async deleteWebhook(guild, action) {
         const { webhookId } = action;
-        
+
         const webhooks = await guild.fetchWebhooks();
         const webhook = webhooks.get(webhookId);
-        
-        if (webhook) {
-            await webhook.delete();
-            this.log('✅', `Deleted webhook: ${webhook.name}`);
+
+        if (!webhook) {
+            return {
+                success: false,
+                error: `Webhook with ID "${webhookId}" not found`
+            };
         }
+
+        const name = webhook.name;
+        await webhook.delete();
+        this.log('✅', `Deleted webhook: ${name}`);
+
+        return {
+            success: true,
+            message: `Deleted webhook: ${name}`
+        };
     }
 
     // ===== THREAD MANAGEMENT IMPLEMENTATIONS =====
