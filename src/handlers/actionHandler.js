@@ -1024,14 +1024,24 @@ class ActionHandler {
 
         const event = guild.scheduledEvents.cache.find(e => e.name === eventName);
 
-        if (event) {
-            await event.edit({
-                name: newName || eventName,
-                description: description,
-                scheduledStartTime: startTime ? new Date(startTime) : undefined
-            });
-            this.log('✅', `Edited event: ${eventName}`);
+        if (!event) {
+            return {
+                success: false,
+                error: `Event "${eventName}" not found`
+            };
         }
+
+        await event.edit({
+            name: newName || eventName,
+            description: description,
+            scheduledStartTime: startTime ? new Date(startTime) : undefined
+        });
+        this.log('✅', `Edited event: ${eventName}`);
+
+        return {
+            success: true,
+            message: `Edited event: ${eventName}`
+        };
     }
 
     async deleteScheduledEvent(guild, action) {
@@ -1041,10 +1051,21 @@ class ActionHandler {
             ? guild.scheduledEvents.cache.get(eventId)
             : guild.scheduledEvents.cache.find(e => e.name === eventName);
 
-        if (event) {
-            await event.delete();
-            this.log('✅', `Deleted event: ${event.name}`);
+        if (!event) {
+            return {
+                success: false,
+                error: `Event "${eventName || eventId}" not found`
+            };
         }
+
+        const name = event.name;
+        await event.delete();
+        this.log('✅', `Deleted event: ${name}`);
+
+        return {
+            success: true,
+            message: `Deleted event: ${name}`
+        };
     }
 
     async startScheduledEvent(guild, action) {
@@ -1052,10 +1073,20 @@ class ActionHandler {
 
         const event = guild.scheduledEvents.cache.find(e => e.name === eventName);
 
-        if (event) {
-            await event.setStatus(2); // Active
-            this.log('✅', `Started event: ${eventName}`);
+        if (!event) {
+            return {
+                success: false,
+                error: `Event "${eventName}" not found`
+            };
         }
+
+        await event.setStatus(2); // Active
+        this.log('✅', `Started event: ${eventName}`);
+
+        return {
+            success: true,
+            message: `Started event: ${eventName}`
+        };
     }
 
     async endScheduledEvent(guild, action) {
@@ -1063,10 +1094,20 @@ class ActionHandler {
 
         const event = guild.scheduledEvents.cache.find(e => e.name === eventName);
 
-        if (event) {
-            await event.setStatus(3); // Completed
-            this.log('✅', `Ended event: ${eventName}`);
+        if (!event) {
+            return {
+                success: false,
+                error: `Event "${eventName}" not found`
+            };
         }
+
+        await event.setStatus(3); // Completed
+        this.log('✅', `Ended event: ${eventName}`);
+
+        return {
+            success: true,
+            message: `Ended event: ${eventName}`
+        };
     }
 
     // ===== ADVANCED VOICE/STAGE IMPLEMENTATIONS =====
