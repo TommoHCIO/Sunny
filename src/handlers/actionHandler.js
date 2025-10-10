@@ -449,32 +449,86 @@ class ActionHandler {
 
     async setChannelTopic(guild, action) {
         const { channelName, topic } = action;
-        
+
         const channel = guild.channels.cache.find(c => c.name === channelName);
-        if (channel && channel.setTopic) {
-            await channel.setTopic(topic);
-            this.log('✅', `Set topic for #${channelName}`);
+
+        if (!channel) {
+            return {
+                success: false,
+                error: `Channel "${channelName}" not found`
+            };
         }
+
+        if (!channel.setTopic) {
+            return {
+                success: false,
+                error: `Channel "${channelName}" does not support topics`
+            };
+        }
+
+        await channel.setTopic(topic);
+        this.log('✅', `Set topic for #${channelName}`);
+
+        return {
+            success: true,
+            message: `Set topic for #${channelName}`
+        };
     }
 
     async setChannelSlowmode(guild, action) {
         const { channelName, seconds } = action;
-        
+
         const channel = guild.channels.cache.find(c => c.name === channelName);
-        if (channel && channel.setRateLimitPerUser) {
-            await channel.setRateLimitPerUser(parseInt(seconds));
-            this.log('✅', `Set slowmode for #${channelName}: ${seconds}s`);
+
+        if (!channel) {
+            return {
+                success: false,
+                error: `Channel "${channelName}" not found`
+            };
         }
+
+        if (!channel.setRateLimitPerUser) {
+            return {
+                success: false,
+                error: `Channel "${channelName}" does not support slowmode`
+            };
+        }
+
+        await channel.setRateLimitPerUser(parseInt(seconds));
+        this.log('✅', `Set slowmode for #${channelName}: ${seconds}s`);
+
+        return {
+            success: true,
+            message: `Set slowmode for #${channelName}: ${seconds}s`
+        };
     }
 
     async setChannelNSFW(guild, action) {
         const { channelName, nsfw } = action;
-        
+
         const channel = guild.channels.cache.find(c => c.name === channelName);
-        if (channel && channel.setNSFW) {
-            await channel.setNSFW(nsfw === 'true');
-            this.log('✅', `Set NSFW for #${channelName}: ${nsfw}`);
+
+        if (!channel) {
+            return {
+                success: false,
+                error: `Channel "${channelName}" not found`
+            };
         }
+
+        if (!channel.setNSFW) {
+            return {
+                success: false,
+                error: `Channel "${channelName}" does not support NSFW setting`
+            };
+        }
+
+        await channel.setNSFW(nsfw === 'true');
+        this.log('✅', `Set NSFW for #${channelName}: ${nsfw}`);
+
+        return {
+            success: true,
+            message: `Set NSFW for #${channelName}: ${nsfw}`
+        };
     }
 
     // ===== ROLE MANAGEMENT IMPLEMENTATIONS =====
@@ -564,87 +618,176 @@ class ActionHandler {
 
     async setRolePermissions(guild, action) {
         const { roleName, permissions } = action;
-        
+
         const role = guild.roles.cache.find(r => r.name === roleName);
-        if (role) {
-            await role.setPermissions(BigInt(permissions));
-            this.log('✅', `Set permissions for role ${roleName}`);
+
+        if (!role) {
+            return {
+                success: false,
+                error: `Role "${roleName}" not found`
+            };
         }
+
+        await role.setPermissions(BigInt(permissions));
+        this.log('✅', `Set permissions for role ${roleName}`);
+
+        return {
+            success: true,
+            message: `Set permissions for role ${roleName}`
+        };
     }
 
     async assignRoleToMember(guild, action) {
         const { userId, roleName } = action;
-        
+
         const member = await guild.members.fetch(userId);
-        const role = guild.roles.cache.find(r => r.name === roleName);
-        
-        if (member && role) {
-            await member.roles.add(role);
-            this.log('✅', `Assigned role ${roleName} to ${member.user.tag}`);
+        if (!member) {
+            return {
+                success: false,
+                error: `Member with ID "${userId}" not found`
+            };
         }
+
+        const role = guild.roles.cache.find(r => r.name === roleName);
+        if (!role) {
+            return {
+                success: false,
+                error: `Role "${roleName}" not found`
+            };
+        }
+
+        await member.roles.add(role);
+        this.log('✅', `Assigned role ${roleName} to ${member.user.tag}`);
+
+        return {
+            success: true,
+            message: `Assigned role ${roleName} to ${member.user.tag}`
+        };
     }
 
     // ===== MEMBER MANAGEMENT IMPLEMENTATIONS =====
 
     async kickMember(guild, action) {
         const { userId, reason } = action;
-        
+
         const member = await guild.members.fetch(userId);
-        if (member) {
-            await member.kick(reason || 'No reason provided');
-            this.log('✅', `Kicked ${member.user.tag}`);
+
+        if (!member) {
+            return {
+                success: false,
+                error: `Member with ID "${userId}" not found`
+            };
         }
+
+        const tag = member.user.tag;
+        await member.kick(reason || 'No reason provided');
+        this.log('✅', `Kicked ${tag}`);
+
+        return {
+            success: true,
+            message: `Kicked ${tag}`
+        };
     }
 
     async banMember(guild, action) {
         const { userId, reason, deleteMessageDays } = action;
-        
+
         const member = await guild.members.fetch(userId);
-        if (member) {
-            await member.ban({
-                reason: reason || 'Banned by owner via Sunny',
-                deleteMessageDays: deleteMessageDays ? parseInt(deleteMessageDays) : 0
-            });
-            this.log('✅', `Banned ${member.user.tag}`);
+
+        if (!member) {
+            return {
+                success: false,
+                error: `Member with ID "${userId}" not found`
+            };
         }
+
+        const tag = member.user.tag;
+        await member.ban({
+            reason: reason || 'Banned by owner via Sunny',
+            deleteMessageDays: deleteMessageDays ? parseInt(deleteMessageDays) : 0
+        });
+        this.log('✅', `Banned ${tag}`);
+
+        return {
+            success: true,
+            message: `Banned ${tag}`
+        };
     }
 
     async unbanMember(guild, action) {
         const { userId } = action;
-        
+
         await guild.members.unban(userId);
         this.log('✅', `Unbanned user ${userId}`);
+
+        return {
+            success: true,
+            message: `Unbanned user ${userId}`
+        };
     }
 
     async timeoutMember(guild, action) {
         const { userId, duration, reason } = action;
-        
+
         const member = await guild.members.fetch(userId);
-        if (member) {
-            const durationMs = parseInt(duration) * 60 * 1000; // Convert minutes to ms
-            await member.timeout(durationMs, reason || 'Moderation by Sunny');
-            this.log('✅', `Timed out ${member.user.tag} for ${duration} minutes`);
+
+        if (!member) {
+            return {
+                success: false,
+                error: `Member with ID "${userId}" not found`
+            };
         }
+
+        const durationMs = parseInt(duration) * 60 * 1000; // Convert minutes to ms
+        await member.timeout(durationMs, reason || 'Moderation by Sunny');
+        this.log('✅', `Timed out ${member.user.tag} for ${duration} minutes`);
+
+        return {
+            success: true,
+            message: `Timed out ${member.user.tag} for ${duration} minutes`
+        };
     }
 
     async removeTimeout(guild, action) {
         const { userId } = action;
-        
+
         const member = await guild.members.fetch(userId);
-        if (member) {
-            await member.timeout(null);
-            this.log('✅', `Removed timeout from ${member.user.tag}`);
+
+        if (!member) {
+            return {
+                success: false,
+                error: `Member with ID "${userId}" not found`
+            };
         }
+
+        await member.timeout(null);
+        this.log('✅', `Removed timeout from ${member.user.tag}`);
+
+        return {
+            success: true,
+            message: `Removed timeout from ${member.user.tag}`
+        };
     }
 
     async setNickname(guild, action) {
         const { userId, nickname } = action;
-        
+
         const member = await guild.members.fetch(userId);
-        if (member) {
-            await member.setNickname(nickname);
-            this.log('✅', `Set nickname for ${member.user.tag}: ${nickname}`);
+
+        if (!member) {
+            return {
+                success: false,
+                error: `Member with ID "${userId}" not found`
+            };
         }
+
+        await member.setNickname(nickname);
+        this.log('✅', `Set nickname for ${member.user.tag}: ${nickname}`);
+
+        return {
+            success: true,
+            message: `Set nickname for ${member.user.tag}: ${nickname}`
+        };
     }
 
     // ===== MESSAGE MANAGEMENT IMPLEMENTATIONS =====
