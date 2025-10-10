@@ -122,7 +122,8 @@ module.exports = async function handleMessage(client, message) {
             message.content,
             context,
             message.author,
-            message.guild
+            message.guild,
+            message.channel  // Pass channel info so Sunny knows where the message came from
         );
 
         const processingTime = Date.now() - startTime;

@@ -53,9 +53,10 @@ Keep responses concise (2-4 sentences usually) but complete. Be genuinely helpfu
  * @param {string} conversationContext - Recent conversation history
  * @param {Object} author - Discord user object
  * @param {Object} guild - Discord guild object
+ * @param {Object} channel - Discord channel object (where message was sent)
  * @returns {Promise<string>} Final text response from Claude
  */
-async function runAgent(userMessage, conversationContext, author, guild) {
+async function runAgent(userMessage, conversationContext, author, guild, channel) {
     const personality = await loadPersonality();
 
     // Check if user is owner (supports multiple owners)
@@ -71,11 +72,14 @@ async function runAgent(userMessage, conversationContext, author, guild) {
         day: 'numeric'
     });
 
+    // Get channel info
+    const channelInfo = channel ? `\nCurrent channel: #${channel.name} (ID: ${channel.id}, Category: ${channel.parent?.name || 'None'})` : '';
+
     // Build initial user message with context
     const initialMessage = `${conversationContext}
 
 Current date: ${currentDate}
-Current user: ${author.username} (ID: ${author.id})${ownerStatus}
+Current user: ${author.username} (ID: ${author.id})${ownerStatus}${channelInfo}
 
 ${isOwner ? 'IMPORTANT: This user is the SERVER OWNER. You can execute owner-only tools when they request them.\n\n' : ''}
 User message: ${userMessage}`;
