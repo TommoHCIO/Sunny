@@ -388,36 +388,63 @@ class ActionHandler {
 
     async deleteCategory(guild, action) {
         const { categoryName, deleteChildren } = action;
-        
+
         const category = guild.channels.cache.find(
             c => c.type === ChannelType.GuildCategory && c.name === categoryName
         );
-        
-        if (category) {
-            if (deleteChildren === 'true') {
-                // Delete all child channels
-                const children = guild.channels.cache.filter(c => c.parentId === category.id);
-                for (const child of children.values()) {
-                    await child.delete();
-                }
-            }
-            await category.delete();
-            this.log('✅', `Deleted category: ${categoryName}`);
+
+        if (!category) {
+            return {
+                success: false,
+                error: `Category "${categoryName}" not found`
+            };
         }
+
+        if (deleteChildren === 'true') {
+            // Delete all child channels
+            const children = guild.channels.cache.filter(c => c.parentId === category.id);
+            for (const child of children.values()) {
+                await child.delete();
+            }
+        }
+
+        await category.delete();
+        this.log('✅', `Deleted category: ${categoryName}`);
+
+        return {
+            success: true,
+            message: `Deleted category: ${categoryName}`
+        };
     }
 
     async moveChannel(guild, action) {
         const { channelName, categoryName } = action;
-        
+
         const channel = guild.channels.cache.find(c => c.name === channelName);
+        if (!channel) {
+            return {
+                success: false,
+                error: `Channel "${channelName}" not found`
+            };
+        }
+
         const category = guild.channels.cache.find(
             c => c.type === ChannelType.GuildCategory && c.name === categoryName
         );
-        
-        if (channel && category) {
-            await channel.setParent(category.id);
-            this.log('✅', `Moved #${channelName} to ${categoryName}`);
+        if (!category) {
+            return {
+                success: false,
+                error: `Category "${categoryName}" not found`
+            };
         }
+
+        await channel.setParent(category.id);
+        this.log('✅', `Moved #${channelName} to ${categoryName}`);
+
+        return {
+            success: true,
+            message: `Moved #${channelName} to ${categoryName}`
+        };
     }
 
     async setChannelTopic(guild, action) {
