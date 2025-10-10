@@ -34,9 +34,10 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildModeration
+        GatewayIntentBits.GuildModeration,
+        GatewayIntentBits.GuildMessageReactions  // Added for reaction roles
     ],
-    partials: [Partials.Channel, Partials.Message],
+    partials: [Partials.Channel, Partials.Message, Partials.Reaction],  // Added Reaction partial
     // Disable REST retries to prevent duplicate messages
     // This fixes the issue where failed API requests are retried but the first request actually succeeded
     rest: {
@@ -52,6 +53,7 @@ const errorHandler = require('./handlers/errorHandler');
 const debugService = require('./services/debugService');
 const messageTracker = require('./utils/messageTracker');
 const { detectBotProcesses, logProcessInfo } = require('./utils/processDetector');
+const reactionRoleService = require('./services/reactionRoleService');
 
 // Connect to MongoDB
 if (process.env.MONGODB_URI) {
@@ -138,6 +140,39 @@ client.on('guildMemberRemove', async (member) => {
         await memberHandler.onMemberLeave(client, member);
     } catch (error) {
         logger.error('Error in guildMemberRemove:', error);
+    }
+});
+
+// Reaction events (for reaction roles)
+client.on('messageReactionAdd', async (reaction, user) => {
+    try {
+        // Fetch partial reactions
+        if (reaction.partial) {
+            await reaction.fetch();
+        }
+
+        const guild = reaction.message.guild;
+        if (guild) {
+            await reactionRoleService.handleReactionAdd(reaction, user, guild);
+        }
+    } catch (error) {
+        logger.error('Error in messageReactionAdd:', error);
+    }
+});
+
+client.on('messageReactionRemove', async (reaction, user) => {
+    try {
+        // Fetch partial reactions
+        if (reaction.partial) {
+            await reaction.fetch();
+        }
+
+        const guild = reaction.message.guild;
+        if (guild) {
+            await reactionRoleService.handleReactionRemove(reaction, user, guild);
+        }
+    } catch (error) {
+        logger.error('Error in messageReactionRemove:', error);
     }
 });
 
