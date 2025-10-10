@@ -166,13 +166,16 @@ User message: ${userMessage}`;
                                 author
                             );
 
-                            console.log(`  ✓ Result: ${JSON.stringify(result).substring(0, 200)}...`);
+                            // Safe logging with null check
+                            const resultStr = result ? JSON.stringify(result) : 'null';
+                            const preview = resultStr.length > 200 ? resultStr.substring(0, 200) + '...' : resultStr;
+                            console.log(`  ✓ Result: ${preview}`);
 
                             // Add tool result to results array
                             toolResults.push({
                                 type: 'tool_result',
                                 tool_use_id: block.id,  // CRITICAL: Must match tool use ID
-                                content: JSON.stringify(result)
+                                content: JSON.stringify(result || { success: false, error: 'Tool returned no result' })
                             });
                         } catch (error) {
                             console.error(`  ✗ Tool execution error:`, error);

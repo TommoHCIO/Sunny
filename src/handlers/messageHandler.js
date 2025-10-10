@@ -4,6 +4,7 @@ const agentService = require('../services/agentService');
 const contextService = require('../services/contextService');
 const debugService = require('../services/debugService');
 const messageTracker = require('../utils/messageTracker');
+const moderationService = require('../services/moderationService');
 
 // Bot startup time - used to filter out old messages
 const BOT_START_TIME = Date.now();
@@ -45,6 +46,20 @@ module.exports = async function handleMessage(client, message) {
 
     // Add message to context (for all messages)
     await contextService.addMessage(message.channel.id, message);
+    
+    // Check for violations BEFORE deciding if Sunny should respond
+    // This ensures harmful messages are moderated even if they don't @mention Sunny
+    const moderationResult = await moderationService.checkMessage(message);
+    if (moderationResult && moderationResult.success) {
+        // Autonomous action taken - send brief notification
+        try {
+            await message.reply(moderationResult.message);
+        } catch (error) {
+            console.error('Failed to send moderation message:', error);
+        }
+        // Don't continue processing - let the timeout speak for itself
+        return;
+    }
 
     // Detect if Sunny should respond
     const triggerResult = await detectTrigger(client, message);

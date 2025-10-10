@@ -54,6 +54,7 @@ const debugService = require('./services/debugService');
 const messageTracker = require('./utils/messageTracker');
 const { detectBotProcesses, logProcessInfo } = require('./utils/processDetector');
 const reactionRoleService = require('./services/reactionRoleService');
+const moderationService = require('./services/moderationService');
 
 // Connect to MongoDB
 if (process.env.MONGODB_URI) {
@@ -76,6 +77,22 @@ if (process.env.MONGODB_URI) {
 client.once('ready', async () => {
     logger.info(`✅ Sunny is online! Logged in as ${client.user.tag}`);
     logger.info(`📊 Serving ${client.guilds.cache.size} server(s)`);
+    
+    // Validate bot permissions in all guilds
+    const { getMissingCriticalPermissions, canTimeout } = require('./utils/permissions');
+    for (const [guildId, guild] of client.guilds.cache) {
+        const missingPerms = getMissingCriticalPermissions(guild);
+        if (missingPerms.length > 0) {
+            logger.warn(`⚠️  Missing permissions in ${guild.name}: ${missingPerms.join(', ')}`);
+            logger.warn(`   Bot functionality will be limited. Please grant these permissions.`);
+        } else {
+            logger.info(`✅ All critical permissions granted in ${guild.name}`);
+        }
+        
+        if (!canTimeout(guild)) {
+            logger.warn(`⚠️  Cannot timeout members in ${guild.name} - autonomous moderation disabled`);
+        }
+    }
     
     // Detect multiple bot instances
     try {
