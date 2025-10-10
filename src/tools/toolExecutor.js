@@ -673,21 +673,35 @@ function getChannelTypeName(type) {
     return typeMap[type] || 'Unknown';
 }
 
+// Helper function to find channel by name or ID
+function findChannel(guild, identifier) {
+    if (!identifier) return null;
+
+    // Try to find by ID first (if identifier looks like a snowflake ID)
+    if (/^\d{17,19}$/.test(identifier)) {
+        const channelById = guild.channels.cache.get(identifier);
+        if (channelById) return channelById;
+    }
+
+    // Try to find by name (case-insensitive)
+    return guild.channels.cache.find(c => c.name.toLowerCase() === identifier.toLowerCase());
+}
+
 // ===== MESSAGE MANAGEMENT IMPLEMENTATIONS =====
 
 async function sendMessage(guild, input) {
     try {
-        const channel = guild.channels.cache.find(c => c.name.toLowerCase() === input.channelName.toLowerCase());
+        const channel = findChannel(guild, input.channelName);
 
         if (!channel) {
-            return { success: false, error: `Channel "${input.channelName}" not found` };
+            return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
         }
 
         const message = await channel.send(input.content);
 
         return {
             success: true,
-            message: `Message sent to #${input.channelName}`,
+            message: `Message sent to #${channel.name}`,
             message_id: message.id
         };
     } catch (error) {
@@ -698,10 +712,10 @@ async function sendMessage(guild, input) {
 async function sendEmbed(guild, input) {
     try {
         const { EmbedBuilder } = require('discord.js');
-        const channel = guild.channels.cache.find(c => c.name.toLowerCase() === input.channelName.toLowerCase());
+        const channel = findChannel(guild, input.channelName);
 
         if (!channel) {
-            return { success: false, error: `Channel "${input.channelName}" not found` };
+            return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
         }
 
         const embed = new EmbedBuilder()
@@ -717,7 +731,7 @@ async function sendEmbed(guild, input) {
 
         return {
             success: true,
-            message: `Embed sent to #${input.channelName}`,
+            message: `Embed sent to #${channel.name}`,
             message_id: message.id
         };
     } catch (error) {
@@ -727,10 +741,10 @@ async function sendEmbed(guild, input) {
 
 async function editMessage(guild, input) {
     try {
-        const channel = guild.channels.cache.find(c => c.name.toLowerCase() === input.channelName.toLowerCase());
+        const channel = findChannel(guild, input.channelName);
 
         if (!channel) {
-            return { success: false, error: `Channel "${input.channelName}" not found` };
+            return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
         }
 
         const message = await channel.messages.fetch(input.messageId);
@@ -738,7 +752,7 @@ async function editMessage(guild, input) {
 
         return {
             success: true,
-            message: `Message edited in #${input.channelName}`
+            message: `Message edited in #${channel.name}`
         };
     } catch (error) {
         return { success: false, error: `Failed to edit message: ${error.message}` };
@@ -747,10 +761,10 @@ async function editMessage(guild, input) {
 
 async function deleteMessage(guild, input) {
     try {
-        const channel = guild.channels.cache.find(c => c.name.toLowerCase() === input.channelName.toLowerCase());
+        const channel = findChannel(guild, input.channelName);
 
         if (!channel) {
-            return { success: false, error: `Channel "${input.channelName}" not found` };
+            return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
         }
 
         const message = await channel.messages.fetch(input.messageId);
@@ -758,7 +772,7 @@ async function deleteMessage(guild, input) {
 
         return {
             success: true,
-            message: `Message deleted from #${input.channelName}`
+            message: `Message deleted from #${channel.name}`
         };
     } catch (error) {
         return { success: false, error: `Failed to delete message: ${error.message}` };
@@ -767,10 +781,10 @@ async function deleteMessage(guild, input) {
 
 async function pinMessage(guild, input) {
     try {
-        const channel = guild.channels.cache.find(c => c.name.toLowerCase() === input.channelName.toLowerCase());
+        const channel = findChannel(guild, input.channelName);
 
         if (!channel) {
-            return { success: false, error: `Channel "${input.channelName}" not found` };
+            return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
         }
 
         const message = await channel.messages.fetch(input.messageId);
@@ -778,7 +792,7 @@ async function pinMessage(guild, input) {
 
         return {
             success: true,
-            message: `Message pinned in #${input.channelName}`
+            message: `Message pinned in #${channel.name}`
         };
     } catch (error) {
         return { success: false, error: `Failed to pin message: ${error.message}` };
@@ -787,10 +801,10 @@ async function pinMessage(guild, input) {
 
 async function unpinMessage(guild, input) {
     try {
-        const channel = guild.channels.cache.find(c => c.name.toLowerCase() === input.channelName.toLowerCase());
+        const channel = findChannel(guild, input.channelName);
 
         if (!channel) {
-            return { success: false, error: `Channel "${input.channelName}" not found` };
+            return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
         }
 
         const message = await channel.messages.fetch(input.messageId);
@@ -798,7 +812,7 @@ async function unpinMessage(guild, input) {
 
         return {
             success: true,
-            message: `Message unpinned from #${input.channelName}`
+            message: `Message unpinned from #${channel.name}`
         };
     } catch (error) {
         return { success: false, error: `Failed to unpin message: ${error.message}` };
@@ -807,10 +821,10 @@ async function unpinMessage(guild, input) {
 
 async function purgeMessages(guild, input) {
     try {
-        const channel = guild.channels.cache.find(c => c.name.toLowerCase() === input.channelName.toLowerCase());
+        const channel = findChannel(guild, input.channelName);
 
         if (!channel) {
-            return { success: false, error: `Channel "${input.channelName}" not found` };
+            return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
         }
 
         const amount = Math.min(input.amount, 100);
@@ -818,7 +832,7 @@ async function purgeMessages(guild, input) {
 
         return {
             success: true,
-            message: `Purged ${amount} messages from #${input.channelName}`
+            message: `Purged ${amount} messages from #${channel.name}`
         };
     } catch (error) {
         return { success: false, error: `Failed to purge messages: ${error.message}` };
@@ -829,10 +843,10 @@ async function purgeMessages(guild, input) {
 
 async function addReaction(guild, input) {
     try {
-        const channel = guild.channels.cache.find(c => c.name.toLowerCase() === input.channelName.toLowerCase());
+        const channel = findChannel(guild, input.channelName);
 
         if (!channel) {
-            return { success: false, error: `Channel "${input.channelName}" not found` };
+            return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
         }
 
         const message = await channel.messages.fetch(input.messageId);
@@ -840,7 +854,7 @@ async function addReaction(guild, input) {
 
         return {
             success: true,
-            message: `Added reaction ${input.emoji} to message`
+            message: `Added reaction ${input.emoji} to message in #${channel.name}`
         };
     } catch (error) {
         return { success: false, error: `Failed to add reaction: ${error.message}` };
@@ -849,10 +863,10 @@ async function addReaction(guild, input) {
 
 async function removeReaction(guild, input) {
     try {
-        const channel = guild.channels.cache.find(c => c.name.toLowerCase() === input.channelName.toLowerCase());
+        const channel = findChannel(guild, input.channelName);
 
         if (!channel) {
-            return { success: false, error: `Channel "${input.channelName}" not found` };
+            return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
         }
 
         const message = await channel.messages.fetch(input.messageId);
@@ -871,7 +885,7 @@ async function removeReaction(guild, input) {
 
         return {
             success: true,
-            message: `Removed reaction ${input.emoji}`
+            message: `Removed reaction ${input.emoji} from message in #${channel.name}`
         };
     } catch (error) {
         return { success: false, error: `Failed to remove reaction: ${error.message}` };
@@ -880,10 +894,10 @@ async function removeReaction(guild, input) {
 
 async function removeAllReactions(guild, input) {
     try {
-        const channel = guild.channels.cache.find(c => c.name.toLowerCase() === input.channelName.toLowerCase());
+        const channel = findChannel(guild, input.channelName);
 
         if (!channel) {
-            return { success: false, error: `Channel "${input.channelName}" not found` };
+            return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
         }
 
         const message = await channel.messages.fetch(input.messageId);
@@ -891,7 +905,7 @@ async function removeAllReactions(guild, input) {
 
         return {
             success: true,
-            message: `Removed all reactions from message`
+            message: `Removed all reactions from message in #${channel.name}`
         };
     } catch (error) {
         return { success: false, error: `Failed to remove all reactions: ${error.message}` };
