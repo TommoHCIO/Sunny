@@ -243,6 +243,9 @@ async function execute(toolName, input, guild, author) {
             case 'create_webhook':
                 return await actionHandler.createWebhook(guild, input);
 
+            case 'list_webhooks':
+                return await listWebhooks(guild, input);
+
             case 'delete_webhook':
                 return await actionHandler.deleteWebhook(guild, input);
 
@@ -1039,6 +1042,28 @@ async function listInvites(guild, input) {
         };
     } catch (error) {
         return { success: false, error: `Failed to list invites: ${error.message}` };
+    }
+}
+
+async function listWebhooks(guild, input) {
+    try {
+        const webhooks = await guild.fetchWebhooks();
+        const webhookList = webhooks.map(w => ({
+            id: w.id,
+            name: w.name,
+            channel: w.channel?.name || 'Unknown',
+            channel_id: w.channelId,
+            created_by: w.owner?.username || 'Unknown',
+            avatar: w.avatarURL() || 'None'
+        }));
+
+        return {
+            success: true,
+            webhooks: webhookList,
+            total: webhookList.length
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to list webhooks: ${error.message}` };
     }
 }
 

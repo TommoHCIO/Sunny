@@ -209,7 +209,8 @@ Examples:
 - **delete_invite** - Delete invite by code (owner only)
 - **list_invites** - List all active invites with stats
 - **create_webhook** - Create webhooks for external integrations (owner only)
-- **delete_webhook** - Delete webhooks (owner only)
+- **list_webhooks** - List all webhooks in the server
+- **delete_webhook** - Delete webhooks by ID (owner only)
 
 ### ⚙️ Server Settings Tools (NEW!)
 - **set_server_name** - Change server name (owner only)

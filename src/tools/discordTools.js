@@ -1029,6 +1029,15 @@ function getDiscordTools(guild) {
             }
         },
         {
+            name: "list_webhooks",
+            description: "List all webhooks in the server.",
+            input_schema: {
+                type: "object",
+                properties: {},
+                required: []
+            }
+        },
+        {
             name: "delete_webhook",
             description: "Delete a webhook. Requires owner permissions.",
             input_schema: {
