@@ -109,13 +109,18 @@ User message: ${userMessage}`;
             // Call Claude with tools
             const response = await anthropic.messages.create({
                 model: process.env.CLAUDE_MODEL || 'claude-3-5-haiku-20241022',
-                max_tokens: parseInt(process.env.CLAUDE_MAX_TOKENS) || 2000,
+                max_tokens: parseInt(process.env.CLAUDE_MAX_TOKENS) || 3000,  // Increased for better multi-step reasoning
                 temperature: 0.7,
                 system: [
                     {
                         type: 'text',
                         text: personality,
                         cache_control: { type: 'ephemeral' }  // Cache personality for 5 min
+                    },
+                    {
+                        type: 'text',
+                        text: 'You have 100+ Discord management tools. CRITICAL: When using multi-step workflows (like reaction roles), always extract data from tool results (especially message_id) to use in subsequent tool calls. Read tool descriptions carefully for workflow patterns.',
+                        cache_control: { type: 'ephemeral' }  // Cache tool guidance
                     }
                 ],
                 tools: tools,
@@ -171,11 +176,27 @@ User message: ${userMessage}`;
                             const preview = resultStr.length > 200 ? resultStr.substring(0, 200) + '...' : resultStr;
                             console.log(`  ✓ Result: ${preview}`);
 
-                            // Add tool result to results array
+                            // Add tool result to results array with enhanced context
+                            const enhancedResult = {
+                                ...result,
+                                _tool_context: {
+                                    tool_name: block.name,
+                                    success: result?.success || false,
+                                    // Highlight important data for next steps
+                                    extracted_data: {
+                                        message_id: result?.message_id,
+                                        channel_id: result?.channel_id,
+                                        channel_name: result?.channel?.name || result?.channel_name,
+                                        role_id: result?.role_id,
+                                        role_name: result?.role?.name || result?.role_name
+                                    }
+                                }
+                            };
+
                             toolResults.push({
                                 type: 'tool_result',
                                 tool_use_id: block.id,  // CRITICAL: Must match tool use ID
-                                content: JSON.stringify(result || { success: false, error: 'Tool returned no result' })
+                                content: JSON.stringify(enhancedResult || { success: false, error: 'Tool returned no result' })
                             });
                         } catch (error) {
                             console.error(`  ✗ Tool execution error:`, error);

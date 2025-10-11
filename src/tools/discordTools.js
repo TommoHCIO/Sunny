@@ -612,13 +612,13 @@ function getDiscordTools(guild) {
         },
         {
             name: "send_embed",
-            description: "Send a rich embed message with formatting, colors, fields, and images. Perfect for announcements, welcome messages, and structured information.",
+            description: "Send rich embed message to any channel. RETURNS message_id which is REQUIRED for add_reaction and setup_reaction_role tools. ACCEPTS BOTH: channel name (e.g., 'welcome') OR channel ID (e.g., '1425938574901121105'). The findChannel() function handles both automatically. IMPORTANT: Save the message_id from the result if you need to add reactions or setup reaction roles!",
             input_schema: {
                 type: "object",
                 properties: {
                     channelName: {
                         type: "string",
-                        description: "Name of the channel"
+                        description: "Channel name OR channel ID. Both formats work! Examples: 'welcome' or '1425938574901121105'"
                     },
                     title: {
                         type: "string",
@@ -746,21 +746,21 @@ function getDiscordTools(guild) {
         // ===== REACTION MANAGEMENT TOOLS =====
         {
             name: "add_reaction",
-            description: "Add a reaction emoji to a message. Works with Unicode emojis (🍂) and custom server emojis.",
+            description: "Add reaction emoji to a message. Part of reaction role workflow: send_embed → add_reaction → setup_reaction_role. Use message_id from send_embed result. Channel parameter accepts both names and IDs.",
             input_schema: {
                 type: "object",
                 properties: {
                     messageId: {
                         type: "string",
-                        description: "ID of the message to react to"
+                        description: "Message ID to add reaction to. Get this from send_embed or send_message result!"
                     },
                     channelName: {
                         type: "string",
-                        description: "Channel containing the message"
+                        description: "Channel name OR ID containing the message. Examples: 'welcome' or '1425938574901121105'"
                     },
                     emoji: {
                         type: "string",
-                        description: "Emoji to react with (e.g., '✅', '🍂', or custom emoji name)"
+                        description: "Emoji to react with (e.g., '✅', '👍', '🍂'). Use exact Unicode or custom emoji name."
                     }
                 },
                 required: ["messageId", "channelName", "emoji"]
@@ -812,25 +812,25 @@ function getDiscordTools(guild) {
         },
         {
             name: "setup_reaction_role",
-            description: "Set up automatic role assignment when users react to a message with a specific emoji. Perfect for verification systems and self-assignable roles.",
+            description: "Set up automatic role assignment when users react with specific emoji. WORKFLOW: 1) First use send_embed/send_message to post message and GET message_id from result, 2) Then use add_reaction to add the emoji to that message, 3) Finally call THIS tool with that message_id. IMPORTANT: Always extract message_id from send_embed/send_message result! Channel parameter accepts both channel name and channel ID.",
             input_schema: {
                 type: "object",
                 properties: {
                     messageId: {
                         type: "string",
-                        description: "Message ID to watch for reactions"
+                        description: "Message ID returned from send_embed or send_message tool. MUST use the exact message_id from the tool result, not a random ID!"
                     },
                     channelName: {
                         type: "string",
-                        description: "Channel containing the message"
+                        description: "Channel name OR channel ID containing the message. Examples: 'welcome' or '1425938574901121105'"
                     },
                     emoji: {
                         type: "string",
-                        description: "Emoji that triggers role assignment"
+                        description: "Emoji for reaction (e.g., '✅', '👍', '🎮'). Use exact Unicode emoji or custom emoji name."
                     },
                     roleName: {
                         type: "string",
-                        description: "Role to assign when user reacts"
+                        description: "Role name to assign when user reacts. Role will be auto-created if it doesn't exist."
                     }
                 },
                 required: ["messageId", "emoji", "roleName"]
