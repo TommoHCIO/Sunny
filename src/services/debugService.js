@@ -1,4 +1,3 @@
-const { EmbedBuilder } = require('discord.js');
 const crypto = require('crypto');
 
 class DebugService {
@@ -56,21 +55,25 @@ class DebugService {
     async logStartup() {
         if (!this.debugChannel) return;
 
-        const embed = new EmbedBuilder()
-            .setColor('#00FF00')
-            .setTitle('🟢 Sunny Instance Started')
-            .setDescription('Debug monitoring active')
-            .addFields(
-                { name: 'Instance ID', value: `\`${this.instanceId}\``, inline: true },
-                { name: 'Process ID', value: `\`${process.pid}\``, inline: true },
-                { name: 'Node Version', value: `\`${process.version}\``, inline: true },
-                { name: 'Start Time', value: `<t:${Math.floor(this.startTime.getTime() / 1000)}:T>`, inline: true },
-                { name: 'Memory', value: `\`${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB\``, inline: true }
-            )
-            .setTimestamp();
+        const timestamp = new Date().toISOString();
+        const memoryMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+        
+        const message = `🟢 **SUNNY INSTANCE STARTED**
+` +
+            `📅 **Time:** ${timestamp}
+` +
+            `🆔 **Instance ID:** \`${this.instanceId}\`
+` +
+            `⚙️ **Process ID:** \`${process.pid}\`
+` +
+            `📦 **Node Version:** \`${process.version}\`
+` +
+            `💾 **Memory:** \`${memoryMB}MB\`
+` +
+            `✅ **Status:** Debug monitoring active`;
 
         try {
-            await this.debugChannel.send({ embeds: [embed] });
+            await this.debugChannel.send(message);
         } catch (error) {
             console.error('Failed to send startup message:', error);
         }
@@ -85,30 +88,28 @@ class DebugService {
         // Track event counts
         this.eventCounts.set(eventType, (this.eventCounts.get(eventType) || 0) + 1);
 
-        const embed = new EmbedBuilder()
-            .setColor('#3498DB')
-            .setTitle(`📡 Event: ${eventType}`)
-            .addFields(
-                { name: 'Instance', value: `\`${this.instanceId}\``, inline: true },
-                { name: 'Count', value: `\`${this.eventCounts.get(eventType)}\``, inline: true },
-                { name: 'Timestamp', value: `<t:${Math.floor(Date.now() / 1000)}:T>`, inline: true }
-            )
-            .setTimestamp();
+        const timestamp = new Date().toISOString();
+        const count = this.eventCounts.get(eventType);
+        
+        let message = `📡 **EVENT: ${eventType}**\n` +
+            `📅 **Time:** ${timestamp}\n` +
+            `🆔 **Instance:** \`${this.instanceId}\`\n` +
+            `🔢 **Count:** \`${count}\``;
 
         if (executionId) {
-            embed.addFields({ name: 'Execution ID', value: `\`${executionId}\``, inline: false });
+            message += `\n🎯 **Execution ID:** \`${executionId}\``;
         }
 
         // Add event-specific data
         if (data) {
-            const fields = this.formatEventData(eventType, data);
-            if (fields.length > 0) {
-                embed.addFields(fields);
+            const dataText = this.formatEventDataAsText(eventType, data);
+            if (dataText) {
+                message += `\n\n${dataText}`;
             }
         }
 
         try {
-            await this.debugChannel.send({ embeds: [embed] });
+            await this.debugChannel.send(message);
         } catch (error) {
             console.error('Failed to log event:', error);
         }
@@ -132,44 +133,37 @@ class DebugService {
             'error': '❌'
         };
 
-        const stageColors = {
-            'received': '#95A5A6',
-            'filtered': '#3498DB',
-            'processing': '#F39C12',
-            'agent_start': '#9B59B6',
-            'agent_loop': '#E67E22',
-            'agent_complete': '#27AE60',
-            'sending': '#1ABC9C',
-            'sent': '#2ECC71',
-            'error': '#E74C3C'
-        };
-
         const emoji = stageEmojis[stage] || '•';
-        const color = stageColors[stage] || '#95A5A6';
+        const timestamp = new Date().toISOString();
+        const stageTitle = stage.toUpperCase().replace('_', ' ');
 
-        const embed = new EmbedBuilder()
-            .setColor(color)
-            .setTitle(`${emoji} ${stage.toUpperCase().replace('_', ' ')}`)
-            .addFields(
-                { name: 'Message ID', value: `\`${messageId}\``, inline: true },
-                { name: 'Execution ID', value: `\`${executionId}\``, inline: true },
-                { name: 'Instance', value: `\`${this.instanceId}\``, inline: true }
-            )
-            .setTimestamp();
+        let message = `${emoji} **${stageTitle}**\n` +
+            `📅 **Time:** ${timestamp}\n` +
+            `💬 **Message ID:** \`${messageId}\`\n` +
+            `🎯 **Execution ID:** \`${executionId}\`\n` +
+            `🆔 **Instance:** \`${this.instanceId}\``;
 
         // Add stage-specific data
         if (data) {
             for (const [key, value] of Object.entries(data)) {
                 if (value !== null && value !== undefined) {
                     const stringValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
-                    const displayValue = stringValue.length > 1024 ? stringValue.substring(0, 1021) + '...' : stringValue;
-                    embed.addFields({ name: key, value: `\`\`\`${displayValue}\`\`\``, inline: false });
+                    const displayValue = stringValue.length > 500 ? stringValue.substring(0, 497) + '...' : stringValue;
+                    message += `\n**${key}:** \`${displayValue}\``;
                 }
             }
         }
 
         try {
-            await this.debugChannel.send({ embeds: [embed] });
+            // Split message if too long (Discord limit 2000 chars)
+            if (message.length > 1900) {
+                const parts = this.splitMessage(message, 1900);
+                for (const part of parts) {
+                    await this.debugChannel.send(part);
+                }
+            } else {
+                await this.debugChannel.send(message);
+            }
         } catch (error) {
             console.error('Failed to log message flow:', error);
         }
@@ -181,39 +175,45 @@ class DebugService {
     async logError(error, context = {}, executionId = null) {
         if (!this.debugChannel) return;
 
-        const embed = new EmbedBuilder()
-            .setColor('#E74C3C')
-            .setTitle('❌ ERROR')
-            .setDescription(`\`\`\`${error.message}\`\`\``)
-            .addFields(
-                { name: 'Instance', value: `\`${this.instanceId}\``, inline: true },
-                { name: 'Process ID', value: `\`${process.pid}\``, inline: true }
-            )
-            .setTimestamp();
+        const timestamp = new Date().toISOString();
+        
+        let message = `❌ **ERROR**\n` +
+            `📅 **Time:** ${timestamp}\n` +
+            `💥 **Message:** \`${error.message}\`\n` +
+            `🆔 **Instance:** \`${this.instanceId}\`\n` +
+            `⚙️ **Process ID:** \`${process.pid}\``;
 
         if (executionId) {
-            embed.addFields({ name: 'Execution ID', value: `\`${executionId}\``, inline: false });
+            message += `\n🎯 **Execution ID:** \`${executionId}\``;
         }
 
         if (error.stack) {
-            const stackLines = error.stack.split('\n').slice(0, 10).join('\n');
-            const truncatedStack = stackLines.length > 1024 ? stackLines.substring(0, 1021) + '...' : stackLines;
-            embed.addFields({ name: 'Stack Trace', value: `\`\`\`${truncatedStack}\`\`\``, inline: false });
+            const stackLines = error.stack.split('\n').slice(0, 5).join('\n');
+            const truncatedStack = stackLines.length > 800 ? stackLines.substring(0, 797) + '...' : stackLines;
+            message += `\n\n**Stack Trace:**\n\`\`\`\n${truncatedStack}\n\`\`\``;
         }
 
         // Add context data
         for (const [key, value] of Object.entries(context)) {
             if (value !== null && value !== undefined) {
                 const stringValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
-                const displayValue = stringValue.length > 1024 ? stringValue.substring(0, 1021) + '...' : stringValue;
-                embed.addFields({ name: key, value: `\`\`\`${displayValue}\`\`\``, inline: false });
+                const displayValue = stringValue.length > 300 ? stringValue.substring(0, 297) + '...' : stringValue;
+                message += `\n**${key}:** \`${displayValue}\``;
             }
         }
 
         try {
-            await this.debugChannel.send({ embeds: [embed] });
-        } catch (error) {
-            console.error('Failed to log error:', error);
+            // Split message if too long
+            if (message.length > 1900) {
+                const parts = this.splitMessage(message, 1900);
+                for (const part of parts) {
+                    await this.debugChannel.send(part);
+                }
+            } else {
+                await this.debugChannel.send(message);
+            }
+        } catch (sendError) {
+            console.error('Failed to log error:', sendError);
         }
     }
 
@@ -225,52 +225,51 @@ class DebugService {
 
         const uptime = Math.floor((Date.now() - this.startTime.getTime()) / 1000);
         const memory = process.memoryUsage();
+        const timestamp = new Date().toISOString();
+        const heapUsedMB = Math.round(memory.heapUsed / 1024 / 1024);
+        const heapTotalMB = Math.round(memory.heapTotal / 1024 / 1024);
 
-        const embed = new EmbedBuilder()
-            .setColor('#9B59B6')
-            .setTitle('📊 Instance Statistics')
-            .addFields(
-                { name: 'Instance ID', value: `\`${this.instanceId}\``, inline: true },
-                { name: 'Uptime', value: `\`${uptime}s\``, inline: true },
-                { name: 'Memory', value: `\`${Math.round(memory.heapUsed / 1024 / 1024)}MB / ${Math.round(memory.heapTotal / 1024 / 1024)}MB\``, inline: true }
-            )
-            .setTimestamp();
+        let message = `📊 **INSTANCE STATISTICS**\n` +
+            `📅 **Time:** ${timestamp}\n` +
+            `🆔 **Instance ID:** \`${this.instanceId}\`\n` +
+            `⏱️ **Uptime:** \`${uptime}s\`\n` +
+            `💾 **Memory:** \`${heapUsedMB}MB / ${heapTotalMB}MB\``;
 
         // Add event counts
         if (this.eventCounts.size > 0) {
-            const eventSummary = Array.from(this.eventCounts.entries())
-                .map(([event, count]) => `${event}: ${count}`)
-                .join('\n');
-            embed.addFields({ name: 'Event Counts', value: `\`\`\`${eventSummary}\`\`\``, inline: false });
+            message += `\n\n**Event Counts:**`;
+            for (const [event, count] of this.eventCounts.entries()) {
+                message += `\n• ${event}: \`${count}\``;
+            }
         }
 
         try {
-            await this.debugChannel.send({ embeds: [embed] });
+            await this.debugChannel.send(message);
         } catch (error) {
             console.error('Failed to log stats:', error);
         }
     }
 
     /**
-     * Format event-specific data into embed fields
+     * Format event-specific data as text
      */
-    formatEventData(eventType, data) {
-        const fields = [];
+    formatEventDataAsText(eventType, data) {
+        let text = '';
 
         switch (eventType) {
             case 'messageCreate':
-                if (data.author) fields.push({ name: 'Author', value: `${data.author.tag} (${data.author.id})`, inline: true });
-                if (data.channel) fields.push({ name: 'Channel', value: `#${data.channel.name}`, inline: true });
+                if (data.author) text += `\n👤 **Author:** ${data.author.tag} (\`${data.author.id}\`)`;
+                if (data.channel) text += `\n📝 **Channel:** #${data.channel.name}`;
+                if (data.id) text += `\n💬 **Message ID:** \`${data.id}\``;
                 if (data.content) {
-                    const content = data.content.length > 1024 ? data.content.substring(0, 1021) + '...' : data.content;
-                    fields.push({ name: 'Content', value: `\`\`\`${content}\`\`\``, inline: false });
+                    const content = data.content.length > 500 ? data.content.substring(0, 497) + '...' : data.content;
+                    text += `\n📄 **Content:** \`${content}\``;
                 }
-                if (data.id) fields.push({ name: 'Message ID', value: `\`${data.id}\``, inline: true });
                 break;
 
             case 'error':
             case 'warn':
-                if (data.message) fields.push({ name: 'Message', value: `\`\`\`${data.message}\`\`\``, inline: false });
+                if (data.message) text += `\n⚠️ **Message:** \`${data.message}\``;
                 break;
 
             default:
@@ -278,13 +277,34 @@ class DebugService {
                 for (const [key, value] of Object.entries(data)) {
                     if (value !== null && value !== undefined) {
                         const stringValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
-                        const displayValue = stringValue.length > 1024 ? stringValue.substring(0, 1021) + '...' : stringValue;
-                        fields.push({ name: key, value: `\`${displayValue}\``, inline: true });
+                        const displayValue = stringValue.length > 500 ? stringValue.substring(0, 497) + '...' : stringValue;
+                        text += `\n**${key}:** \`${displayValue}\``;
                     }
                 }
         }
 
-        return fields;
+        return text;
+    }
+
+    /**
+     * Split long messages into chunks
+     */
+    splitMessage(message, maxLength) {
+        const parts = [];
+        let currentPart = '';
+        const lines = message.split('\n');
+
+        for (const line of lines) {
+            if ((currentPart + line + '\n').length > maxLength) {
+                if (currentPart) parts.push(currentPart);
+                currentPart = line + '\n';
+            } else {
+                currentPart += line + '\n';
+            }
+        }
+
+        if (currentPart) parts.push(currentPart);
+        return parts;
     }
 
     /**
