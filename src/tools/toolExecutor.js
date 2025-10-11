@@ -7,6 +7,8 @@
 
 const { ChannelType } = require('discord.js');
 const { isOwner } = require('../utils/permissions');
+const { retryWithBackoff } = require('../utils/retry');
+const { toolExecutionRateLimiter } = require('../utils/rateLimiter');
 const ActionHandler = require('../handlers/actionHandler');
 const serverInspection = require('./serverInspection');
 const memberManagement = require('./memberManagement');
@@ -68,6 +70,10 @@ async function execute(toolName, input, guild, author) {
     }
 
     try {
+        // Apply rate limiting before executing any tool
+        // This prevents hammering Discord API with rapid tool calls
+        await toolExecutionRateLimiter.removeTokens(1);
+
         // Route tool to appropriate handler
         switch (toolName) {
             // ===== SERVER INSPECTION TOOLS =====
@@ -518,8 +524,15 @@ async function listMembers(guild, input) {
         const roleFilter = input.role_filter || null;
         const limit = input.limit || 50;
 
-        // Fetch all members (required for accurate list)
-        await guild.members.fetch();
+        // Fetch all members (required for accurate list) with retry logic
+        await retryWithBackoff(
+            () => guild.members.fetch(),
+            {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                operationName: 'Fetch Guild Members'
+            }
+        );
 
         let members = Array.from(guild.members.cache.values());
 
@@ -609,8 +622,15 @@ async function assignRole(guild, author, input) {
     const targetUserId = input.userId || author.id;
 
     try {
-        // Get the member
-        const member = await guild.members.fetch(targetUserId);
+        // Get the member with retry logic
+        const member = await retryWithBackoff(
+            () => guild.members.fetch(targetUserId),
+            {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                operationName: 'Fetch Member'
+            }
+        );
 
         // If owner is requesting, bypass self-assignable check
         if (isOwner(author.id)) {
@@ -630,7 +650,14 @@ async function assignRole(guild, author, input) {
                 };
             }
 
-            await member.roles.add(role);
+            await retryWithBackoff(
+                () => member.roles.add(role),
+                {
+                    maxAttempts: 3,
+                    baseDelay: 1000,
+                    operationName: 'Add Role'
+                }
+            );
             return {
                 success: true,
                 message: `Added ${input.roleName} role to ${member.user.username}`
@@ -665,7 +692,14 @@ async function removeRole(guild, author, input) {
     const targetUserId = input.userId || author.id;
 
     try {
-        const member = await guild.members.fetch(targetUserId);
+        const member = await retryWithBackoff(
+            () => guild.members.fetch(targetUserId),
+            {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                operationName: 'Fetch Member'
+            }
+        );
 
         // If owner is requesting, bypass self-assignable check
         if (isOwner(author.id)) {
@@ -685,7 +719,14 @@ async function removeRole(guild, author, input) {
                 };
             }
 
-            await member.roles.remove(role);
+            await retryWithBackoff(
+                () => member.roles.remove(role),
+                {
+                    maxAttempts: 3,
+                    baseDelay: 1000,
+                    operationName: 'Remove Role'
+                }
+            );
             return {
                 success: true,
                 message: `Removed ${input.roleName} role from ${member.user.username}`
@@ -825,7 +866,14 @@ async function sendMessage(guild, input) {
             return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
         }
 
-        const message = await channel.send(input.content);
+        const message = await retryWithBackoff(
+            () => channel.send(input.content),
+            {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                operationName: 'Send Message'
+            }
+        );
 
         return {
             success: true,
@@ -855,7 +903,14 @@ async function sendEmbed(guild, input) {
         if (input.imageUrl) embed.setImage(input.imageUrl);
         if (input.thumbnailUrl) embed.setThumbnail(input.thumbnailUrl);
 
-        const message = await channel.send({ embeds: [embed] });
+        const message = await retryWithBackoff(
+            () => channel.send({ embeds: [embed] }),
+            {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                operationName: 'Send Embed'
+            }
+        );
 
         return {
             success: true,
@@ -875,8 +930,22 @@ async function editMessage(guild, input) {
             return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
         }
 
-        const message = await channel.messages.fetch(input.messageId);
-        await message.edit(input.newContent);
+        const message = await retryWithBackoff(
+            () => channel.messages.fetch(input.messageId),
+            {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                operationName: 'Fetch Message'
+            }
+        );
+        await retryWithBackoff(
+            () => message.edit(input.newContent),
+            {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                operationName: 'Edit Message'
+            }
+        );
 
         return {
             success: true,
@@ -895,8 +964,22 @@ async function deleteMessage(guild, input) {
             return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
         }
 
-        const message = await channel.messages.fetch(input.messageId);
-        await message.delete();
+        const message = await retryWithBackoff(
+            () => channel.messages.fetch(input.messageId),
+            {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                operationName: 'Fetch Message'
+            }
+        );
+        await retryWithBackoff(
+            () => message.delete(),
+            {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                operationName: 'Delete Message'
+            }
+        );
 
         return {
             success: true,
@@ -915,8 +998,22 @@ async function pinMessage(guild, input) {
             return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
         }
 
-        const message = await channel.messages.fetch(input.messageId);
-        await message.pin();
+        const message = await retryWithBackoff(
+            () => channel.messages.fetch(input.messageId),
+            {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                operationName: 'Fetch Message'
+            }
+        );
+        await retryWithBackoff(
+            () => message.pin(),
+            {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                operationName: 'Pin Message'
+            }
+        );
 
         return {
             success: true,
@@ -935,8 +1032,22 @@ async function unpinMessage(guild, input) {
             return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
         }
 
-        const message = await channel.messages.fetch(input.messageId);
-        await message.unpin();
+        const message = await retryWithBackoff(
+            () => channel.messages.fetch(input.messageId),
+            {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                operationName: 'Fetch Message'
+            }
+        );
+        await retryWithBackoff(
+            () => message.unpin(),
+            {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                operationName: 'Unpin Message'
+            }
+        );
 
         return {
             success: true,
@@ -956,7 +1067,14 @@ async function purgeMessages(guild, input) {
         }
 
         const amount = Math.min(input.amount, 100);
-        await channel.bulkDelete(amount, true);
+        await retryWithBackoff(
+            () => channel.bulkDelete(amount, true),
+            {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                operationName: 'Bulk Delete Messages'
+            }
+        );
 
         return {
             success: true,
@@ -977,10 +1095,17 @@ async function addReaction(guild, input) {
             return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
         }
 
-        // Try to fetch the message with better error handling
+        // Try to fetch the message with better error handling and retry logic
         let message;
         try {
-            message = await channel.messages.fetch(input.messageId);
+            message = await retryWithBackoff(
+                () => channel.messages.fetch(input.messageId),
+                {
+                    maxAttempts: 3,
+                    baseDelay: 1000,
+                    operationName: 'Fetch Message for Reaction'
+                }
+            );
         } catch (fetchError) {
             if (fetchError.code === 10008) {
                 return { success: false, error: `Message ${input.messageId} not found in #${channel.name}. The message may have been deleted or the ID is incorrect.` };
@@ -988,9 +1113,16 @@ async function addReaction(guild, input) {
             return { success: false, error: `Could not fetch message: ${fetchError.message} (Code: ${fetchError.code || 'unknown'})` };
         }
 
-        // Try to add the reaction
+        // Try to add the reaction with retry logic
         try {
-            await message.react(input.emoji);
+            await retryWithBackoff(
+                () => message.react(input.emoji),
+                {
+                    maxAttempts: 3,
+                    baseDelay: 1000,
+                    operationName: 'Add Reaction'
+                }
+            );
         } catch (reactError) {
             if (reactError.code === 10014) {
                 return { success: false, error: `Invalid emoji: "${input.emoji}". Use Unicode emojis (like ✅) or custom emoji names from this server.` };
@@ -1018,7 +1150,14 @@ async function removeReaction(guild, input) {
             return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
         }
 
-        const message = await channel.messages.fetch(input.messageId);
+        const message = await retryWithBackoff(
+            () => channel.messages.fetch(input.messageId),
+            {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                operationName: 'Fetch Message'
+            }
+        );
 
         if (input.userId) {
             const userReaction = message.reactions.cache.find(r => r.emoji.name === input.emoji || r.emoji.toString() === input.emoji);
@@ -1049,8 +1188,22 @@ async function removeAllReactions(guild, input) {
             return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
         }
 
-        const message = await channel.messages.fetch(input.messageId);
-        await message.reactions.removeAll();
+        const message = await retryWithBackoff(
+            () => channel.messages.fetch(input.messageId),
+            {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                operationName: 'Fetch Message'
+            }
+        );
+        await retryWithBackoff(
+            () => message.reactions.removeAll(),
+            {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                operationName: 'Remove All Reactions'
+            }
+        );
 
         return {
             success: true,

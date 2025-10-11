@@ -10,6 +10,8 @@ const fs = require('fs').promises;
 const path = require('path');
 const discordTools = require('../tools/discordTools');
 const toolExecutor = require('../tools/toolExecutor');
+const { retryWithBackoff } = require('../utils/retry');
+const { anthropicRateLimiter } = require('../utils/rateLimiter');
 
 const anthropic = new Anthropic({
     apiKey: process.env.CLAUDE_API_KEY
@@ -146,8 +148,12 @@ User message: ${userMessage}`;
             loopCount++;
             console.log(`🔄 Agent loop iteration ${loopCount}`);
 
-            // Call Claude with tools
-            const response = await anthropic.messages.create({
+            // Apply rate limiting before calling Claude API
+            await anthropicRateLimiter.removeTokens(1);
+
+            // Call Claude with tools (with retry logic for transient failures)
+            const response = await retryWithBackoff(
+                () => anthropic.messages.create({
                 model: process.env.CLAUDE_MODEL || 'claude-3-5-haiku-20241022',
                 max_tokens: parseInt(process.env.CLAUDE_MAX_TOKENS) || 3000,  // Increased for better multi-step reasoning
                 temperature: 0.7,
@@ -165,7 +171,16 @@ User message: ${userMessage}`;
                 ],
                 tools: tools,
                 messages: messages
-            });
+            }),
+            {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                operationName: 'Claude API Call',
+                onRetry: (attempt, error, delay) => {
+                    console.log(`⚠️  Claude API retry ${attempt}/3 after ${delay}ms: ${error.message}`);
+                }
+            }
+        );
 
             // Add assistant response to conversation history
             messages.push({
