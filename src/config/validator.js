@@ -28,7 +28,7 @@ const ENV_SCHEMA = {
         type: 'string',
         description: 'Discord bot token from Discord Developer Portal'
     },
-    ANTHROPIC_API_KEY: {
+    CLAUDE_API_KEY: {
         required: true,
         type: 'string',
         description: 'Anthropic API key for Claude AI'
