@@ -49,8 +49,7 @@ const warningSchema = new mongoose.Schema({
     },
     expires: {
         type: Date,
-        required: true,
-        index: true // Index for efficient cleanup queries
+        required: true
     },
     createdAt: {
         type: Date,

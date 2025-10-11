@@ -59,10 +59,7 @@ const databaseService = require('./services/database/databaseService');
 
 // Connect to MongoDB
 if (process.env.MONGODB_URI) {
-    mongoose.connect(process.env.MONGODB_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true
-    })
+    mongoose.connect(process.env.MONGODB_URI)
     .then(() => {
         logger.info('✅ Connected to MongoDB');
     })
