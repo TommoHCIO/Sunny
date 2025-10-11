@@ -18,13 +18,21 @@ async function setupReactionRole(guild, input) {
     try {
         const { messageId, channelName, emoji, roleName } = input;
 
-        // Find the channel
-        const channel = channelName
-            ? guild.channels.cache.find(c => c.name.toLowerCase() === channelName.toLowerCase())
-            : null;
+        // Find the channel - handles both channel names and IDs
+        let channel = null;
+        if (channelName) {
+            // Try to find by ID first (if identifier looks like a snowflake ID)
+            if (/^\d{17,19}$/.test(channelName)) {
+                channel = guild.channels.cache.get(channelName);
+            }
+            // If not found by ID, try by name (case-insensitive)
+            if (!channel) {
+                channel = guild.channels.cache.find(c => c.name.toLowerCase() === channelName.toLowerCase());
+            }
+        }
 
         if (channelName && !channel) {
-            return { success: false, error: `Channel "${channelName}" not found` };
+            return { success: false, error: `Channel "${channelName}" not found. Provide either channel name or channel ID.` };
         }
 
         // Verify the role exists or create it
