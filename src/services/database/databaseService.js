@@ -5,7 +5,7 @@
  */
 
 const mongoose = require('mongoose');
-const { Warning, Conversation, UserPreference, ServerSettings } = require('../../models');
+const { Warning, Conversation, UserPreference, ServerSettings, ReactionRole } = require('../../models');
 const winston = require('winston');
 
 const logger = winston.createLogger({
@@ -303,6 +303,77 @@ class DatabaseService {
         return this.withFallback(async () => {
             return await ServerSettings.setLogChannel(guildId, logType, channelId);
         }, null);
+    }
+
+    // ===== REACTION ROLE OPERATIONS =====
+
+    /**
+     * Get all reaction roles for a guild
+     */
+    async getReactionRoles(guildId) {
+        return this.withFallback(async () => {
+            return await ReactionRole.findByGuild(guildId);
+        }, []);
+    }
+
+    /**
+     * Get all reaction roles (for loading on startup)
+     */
+    async getAllReactionRoles() {
+        return this.withFallback(async () => {
+            return await ReactionRole.find({});
+        }, []);
+    }
+
+    /**
+     * Save a reaction role binding
+     */
+    async saveReactionRole(messageId, channelId, guildId, emoji, roleName) {
+        return this.withFallback(async () => {
+            // Use upsert to avoid duplicates
+            const reactionRole = await ReactionRole.findOneAndUpdate(
+                { messageId, emoji },
+                { messageId, channelId, guildId, emoji, roleName },
+                { upsert: true, new: true }
+            );
+            logger.info(`✅ Saved reaction role: ${emoji} → ${roleName} on message ${messageId}`);
+            return reactionRole;
+        }, null);
+    }
+
+    /**
+     * Delete a reaction role binding
+     */
+    async deleteReactionRole(messageId, emoji) {
+        return this.withFallback(async () => {
+            const deleted = await ReactionRole.deleteBinding(messageId, emoji);
+            if (deleted) {
+                logger.info(`✅ Deleted reaction role: ${emoji} from message ${messageId}`);
+            }
+            return deleted;
+        }, false);
+    }
+
+    /**
+     * Delete all reaction roles for a message
+     */
+    async deleteReactionRolesByMessage(messageId) {
+        return this.withFallback(async () => {
+            const count = await ReactionRole.deleteByMessage(messageId);
+            if (count > 0) {
+                logger.info(`✅ Deleted ${count} reaction role(s) for message ${messageId}`);
+            }
+            return count;
+        }, 0);
+    }
+
+    /**
+     * Count reaction roles by guild
+     */
+    async countReactionRoles(guildId) {
+        return this.withFallback(async () => {
+            return await ReactionRole.countByGuild(guildId);
+        }, 0);
     }
 
     // ===== MAINTENANCE OPERATIONS =====

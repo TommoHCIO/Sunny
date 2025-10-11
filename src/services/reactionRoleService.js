@@ -2,9 +2,12 @@
 /**
  * Reaction Role Service - Manages automatic role assignment based on reactions
  * Stores reaction role mappings and handles reaction events
+ * Now with MongoDB persistence for reliability across bot restarts
  */
 
-// In-memory storage for reaction roles
+const databaseService = require('./database/databaseService');
+
+// In-memory storage for reaction roles (for fast lookup)
 // Format: { messageId: { emoji: roleName } }
 const reactionRoles = new Map();
 
@@ -56,13 +59,17 @@ async function setupReactionRole(guild, input) {
             }
         }
 
-        // Store the reaction role mapping
+        // Store the reaction role mapping in memory
         if (!reactionRoles.has(messageId)) {
             reactionRoles.set(messageId, new Map());
         }
 
         const messageRoles = reactionRoles.get(messageId);
         messageRoles.set(emoji, roleName);
+
+        // Persist to database for survival across bot restarts
+        const channelId = channel ? channel.id : null;
+        await databaseService.saveReactionRole(messageId, channelId, guild.id, emoji, roleName);
 
         console.log(`✅ Set up reaction role: ${emoji} → ${roleName} on message ${messageId}`);
 
@@ -104,6 +111,9 @@ async function removeReactionRole(input) {
         if (messageRoles.size === 0) {
             reactionRoles.delete(messageId);
         }
+
+        // Delete from database
+        await databaseService.deleteReactionRole(messageId, emoji);
 
         console.log(`✅ Removed reaction role: ${emoji} → ${roleName} from message ${messageId}`);
 
@@ -230,10 +240,58 @@ async function handleReactionRemove(reaction, user, guild) {
     }
 }
 
+/**
+ * Load all reaction roles from database on bot startup
+ * @param {Client} client - Discord client object
+ */
+async function loadReactionRoles(client) {
+    try {
+        console.log('📥 Loading reaction roles from database...');
+        
+        const allRoles = await databaseService.getAllReactionRoles();
+        
+        if (!allRoles || allRoles.length === 0) {
+            console.log('📭 No reaction roles found in database');
+            return { success: true, count: 0 };
+        }
+
+        let loadedCount = 0;
+        let errorCount = 0;
+
+        for (const roleData of allRoles) {
+            try {
+                // Store in memory Map
+                if (!reactionRoles.has(roleData.messageId)) {
+                    reactionRoles.set(roleData.messageId, new Map());
+                }
+                
+                const messageRoles = reactionRoles.get(roleData.messageId);
+                messageRoles.set(roleData.emoji, roleData.roleName);
+                
+                loadedCount++;
+            } catch (error) {
+                console.error(`❌ Failed to load reaction role: ${roleData.emoji} → ${roleData.roleName}`, error);
+                errorCount++;
+            }
+        }
+
+        console.log(`✅ Loaded ${loadedCount} reaction role(s) from database`);
+        if (errorCount > 0) {
+            console.log(`⚠️  Failed to load ${errorCount} reaction role(s)`);
+        }
+
+        return { success: true, count: loadedCount, errors: errorCount };
+    } catch (error) {
+        console.error('❌ Error loading reaction roles from database:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 module.exports = {
     setupReactionRole,
     removeReactionRole,
     listReactionRoles,
     handleReactionAdd,
-    handleReactionRemove
+    handleReactionRemove,
+    loadReactionRoles
 };

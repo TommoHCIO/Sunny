@@ -113,6 +113,16 @@ client.once('ready', async () => {
         logger.error('⚠️  Failed to initialize debug monitoring:', error);
     }
     
+    // Load reaction roles from database
+    try {
+        const result = await reactionRoleService.loadReactionRoles(client);
+        if (result.success && result.count > 0) {
+            logger.info(`✅ Loaded ${result.count} reaction role(s) from database`);
+        }
+    } catch (error) {
+        logger.error('⚠️  Failed to load reaction roles:', error);
+    }
+    
     // Set bot status
     client.user.setPresence({
         activities: [{ name: 'The Nook 🍂', type: 3 }], // Type 3 = Watching
