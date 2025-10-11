@@ -2,10 +2,11 @@
 /**
  * Autonomous Moderation Service
  * Handles automatic timeout/warning system with escalating punishments
- * Requires MongoDB for persistent warning tracking
+ * Uses MongoDB for persistent warning tracking with in-memory fallback
  */
 
 const { canTimeout } = require('../utils/permissions');
+const databaseService = require('./database/databaseService');
 const winston = require('winston');
 
 const logger = winston.createLogger({
@@ -70,19 +71,45 @@ function getCacheKey(userId, guildId) {
 }
 
 /**
- * Get user's warning history
+ * Get user's warning history (MongoDB with in-memory fallback)
  */
-function getWarnings(userId, guildId) {
+async function getWarnings(userId, guildId) {
+    // Try MongoDB first
+    const warnings = await databaseService.getActiveWarnings(userId, guildId);
+    
+    if (warnings && warnings.length > 0) {
+        return {
+            count: warnings.length,
+            warnings: warnings.map(w => ({
+                reason: w.reason,
+                severity: w.severity,
+                timestamp: w.createdAt,
+                expires: w.expires
+            })),
+            lastWarning: warnings[0].createdAt
+        };
+    }
+    
+    // Fallback to in-memory cache
     const key = getCacheKey(userId, guildId);
     return warningCache.get(key) || { count: 0, warnings: [], lastWarning: null };
 }
 
 /**
- * Add warning to user's history
+ * Add warning to user's history (MongoDB with in-memory fallback)
  */
-function addWarning(userId, guildId, reason, severity = 'medium') {
+async function addWarning(userId, guildId, reason, severity = 'medium', options = {}) {
+    // Try MongoDB first
+    const dbWarning = await databaseService.addWarning(userId, guildId, reason, severity, options);
+    
+    if (dbWarning) {
+        logger.info(`✅ Warning stored in MongoDB: ${userId} in guild ${guildId}`);
+        return await getWarnings(userId, guildId);
+    }
+    
+    // Fallback to in-memory cache
     const key = getCacheKey(userId, guildId);
-    const history = getWarnings(userId, guildId);
+    const history = await getWarnings(userId, guildId);
     
     const warning = {
         reason,
@@ -97,7 +124,7 @@ function addWarning(userId, guildId, reason, severity = 'medium') {
     
     warningCache.set(key, history);
     
-    logger.info(`⚠️  Warning added: ${userId} in guild ${guildId} - Reason: ${reason}`);
+    logger.info(`⚠️  Warning added to cache: ${userId} in guild ${guildId} - Reason: ${reason}`);
     
     return history;
 }
@@ -240,10 +267,15 @@ async function applyAutonomousTimeout(message, violation) {
     }
     
     // Get warning history
-    const history = getWarnings(author.id, guild.id);
+    const history = await getWarnings(author.id, guild.id);
     
     // Add new warning
-    addWarning(author.id, guild.id, violation.reason, violation.severity);
+    await addWarning(author.id, guild.id, violation.reason, violation.severity, {
+        action: 'timeout',
+        duration: null, // Will be set after calculation
+        messageContent: content.substring(0, 200), // Store first 200 chars
+        channelId: message.channel.id
+    });
     
     // Calculate timeout duration
     const duration = calculateTimeoutDuration(history.count, violation.severity);
@@ -311,14 +343,30 @@ async function checkMessage(message) {
 }
 
 /**
- * Get moderation statistics for a guild
+ * Get moderation statistics for a guild (MongoDB with in-memory fallback)
  */
-function getStats(guildId, timeRange = '24h') {
+async function getStats(guildId, timeRange = '24h') {
+    // Try MongoDB first
+    const dbStats = await databaseService.getModerationStats(guildId, timeRange);
+    
+    if (dbStats && dbStats.totalActions > 0) {
+        return {
+            total_warnings: dbStats.totalActions,
+            active_warnings: dbStats.activeWarnings,
+            users_flagged: dbStats.uniqueUsersWarned,
+            action_breakdown: dbStats.actionBreakdown,
+            timeRange: dbStats.timeRange,
+            source: 'mongodb'
+        };
+    }
+    
+    // Fallback to in-memory cache
     const stats = {
         total_warnings: 0,
         active_timeouts: 0,
         users_flagged: 0,
-        timeRange
+        timeRange,
+        source: 'cache'
     };
     
     const now = new Date();

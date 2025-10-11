@@ -55,6 +55,7 @@ const messageTracker = require('./utils/messageTracker');
 const { detectBotProcesses, logProcessInfo } = require('./utils/processDetector');
 const reactionRoleService = require('./services/reactionRoleService');
 const moderationService = require('./services/moderationService');
+const databaseService = require('./services/database/databaseService');
 
 // Connect to MongoDB
 if (process.env.MONGODB_URI) {
@@ -131,6 +132,23 @@ client.once('ready', async () => {
             logger.error('Failed to log stats:', error);
         }
     }, 5 * 60 * 1000);
+    
+    // Database cleanup every 6 hours
+    setInterval(async () => {
+        try {
+            if (mongoose.connection.readyState === 1) {
+                logger.info('🧹 Running database cleanup...');
+                const cleanupResults = await databaseService.runCleanup();
+                logger.info(`✅ Cleanup complete - Warnings: ${cleanupResults.warnings}, Conversations: ${cleanupResults.conversations}`);
+                
+                // Log database stats
+                const dbStats = await databaseService.getDatabaseStats();
+                logger.info('📊 Database stats:', dbStats);
+            }
+        } catch (error) {
+            logger.error('❌ Database cleanup failed:', error);
+        }
+    }, 6 * 60 * 60 * 1000); // Every 6 hours
 });
 
 // Message events

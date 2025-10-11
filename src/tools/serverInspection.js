@@ -313,17 +313,22 @@ async function getModerationStats(guild, timeRange = '24h') {
     }
 
     try {
-        // Get stats from moderation service
-        const stats = moderationService.getStats(guild.id, timeRange);
+        // Get stats from moderation service (now async)
+        const stats = await moderationService.getStats(guild.id, timeRange);
         
         return {
             success: true,
             stats: {
-                timeRange,
-                totalWarnings: stats.total_warnings,
-                activeTimeouts: stats.active_timeouts,
-                usersFlagged: stats.users_flagged,
-                note: 'Warning history resets after 30 days. Statistics are from in-memory cache until MongoDB is configured.'
+                timeRange: stats.timeRange,
+                totalWarnings: stats.total_warnings || 0,
+                activeWarnings: stats.active_warnings || 0,
+                activeTimeouts: stats.active_timeouts || 0,
+                usersFlagged: stats.users_flagged || 0,
+                actionBreakdown: stats.action_breakdown || [],
+                dataSource: stats.source || 'unknown',
+                note: stats.source === 'mongodb' 
+                    ? 'Statistics from persistent MongoDB storage' 
+                    : 'Warning history resets after 30 days. Statistics from in-memory cache - configure MONGODB_URI for persistence.'
             }
         };
     } catch (error) {

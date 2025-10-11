@@ -1,4 +1,10 @@
 // src/services/contextService.js
+/**
+ * Context Service - Manages conversation context
+ * Uses MongoDB for persistent storage with in-memory fallback
+ */
+
+const databaseService = require('./database/databaseService');
 
 class ContextService {
     constructor() {
@@ -8,6 +14,20 @@ class ContextService {
     }
     
     async getContext(channelId) {
+        // Try MongoDB first
+        const dbContext = await databaseService.getRecentMessages(channelId, this.maxMessages);
+        
+        if (dbContext && dbContext.length > 0) {
+            return dbContext.map(msg => ({
+                author: msg.authorName,
+                authorId: msg.authorId,
+                content: msg.content,
+                timestamp: msg.timestamp.getTime(),
+                isSunny: msg.isBot
+            }));
+        }
+        
+        // Fallback to in-memory cache
         if (!this.channelContexts.has(channelId)) {
             this.channelContexts.set(channelId, []);
         }
@@ -15,6 +35,14 @@ class ContextService {
     }
     
     async addMessage(channelId, message) {
+        // Store in MongoDB first
+        await databaseService.addMessageToConversation(
+            channelId,
+            message.guild.id,
+            message
+        );
+        
+        // Also update in-memory cache for immediate access
         const context = await this.getContext(channelId);
         
         // Add new message
