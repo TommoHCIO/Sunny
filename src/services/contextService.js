@@ -6,13 +6,49 @@
 
 const databaseService = require('./database/databaseService');
 
+/**
+ * Context Service for managing conversation history and context
+ * 
+ * Features:
+ * - Persistent storage via MongoDB with in-memory caching
+ * - Automatic context trimming to configured message limit
+ * - Conversation pruning for inactive channels
+ * - Context-aware prompt building for AI responses
+ * 
+ * Singleton instance exported for consistent state across application.
+ */
 class ContextService {
+    /**
+     * Create a new ContextService instance
+     * 
+     * @constructor
+     */
     constructor() {
         // In-memory store (per-channel context)
         this.channelContexts = new Map();
         this.maxMessages = parseInt(process.env.CONTEXT_MAX_MESSAGES) || 10;
     }
     
+    /**
+     * Get conversation context for a channel
+     * 
+     * Retrieves recent messages from MongoDB first, falling back to in-memory cache.
+     * Returns formatted message objects suitable for AI context building.
+     * 
+     * @param {string} channelId - Discord channel ID to retrieve context for
+     * @returns {Promise<Array<Object>>} Array of message objects
+     * @returns {string} return[].author - Username of message author
+     * @returns {string} return[].authorId - User ID of message author
+     * @returns {string} return[].content - Message content
+     * @returns {number} return[].timestamp - Message timestamp in milliseconds
+     * @returns {boolean} return[].isSunny - Whether message is from Sunny bot
+     * 
+     * @example
+     * const context = await contextService.getContext('123456789');
+     * context.forEach(msg => {
+     *   console.log(`${msg.author}: ${msg.content}`);
+     * });
+     */
     async getContext(channelId) {
         // Try MongoDB first
         const dbContext = await databaseService.getRecentMessages(channelId, this.maxMessages);
@@ -34,6 +70,28 @@ class ContextService {
         return this.channelContexts.get(channelId);
     }
     
+    /**
+     * Add a message to conversation context
+     * 
+     * Stores message in both MongoDB (persistent) and in-memory cache (fast access).
+     * Automatically trims context to maxMessages limit, removing oldest messages.
+     * 
+     * @param {string} channelId - Discord channel ID where message was sent
+     * @param {import('discord.js').Message} message - Discord.js Message object
+     * @param {Object} message.author - Message author
+     * @param {string} message.author.username - Author's username
+     * @param {string} message.author.id - Author's user ID
+     * @param {boolean} message.author.bot - Whether author is a bot
+     * @param {string} message.content - Message content
+     * @param {number} message.createdTimestamp - Message timestamp
+     * @param {Object} message.guild - Guild where message was sent
+     * @returns {Promise<void>}
+     * 
+     * @example
+     * client.on('messageCreate', async (message) => {
+     *   await contextService.addMessage(message.channel.id, message);
+     * });
+     */
     async addMessage(channelId, message) {
         // Store in MongoDB first
         await databaseService.addMessageToConversation(
@@ -62,6 +120,28 @@ class ContextService {
         this.channelContexts.set(channelId, context);
     }
     
+    /**
+     * Build context-aware prompt for AI agent
+     * 
+     * Creates a formatted prompt including:
+     * - Recent conversation history with user IDs
+     * - Reply context if message is a reply
+     * - Current message details
+     * - Instructions for AI response
+     * 
+     * @param {string} channelId - Discord channel ID to build context from
+     * @param {import('discord.js').Message} currentMessage - Current message being processed
+     * @param {string|null} [replyContext=null] - Content of message being replied to, if any
+     * @returns {Promise<string>} Formatted prompt string for AI agent
+     * 
+     * @example
+     * const prompt = await contextService.buildContextPrompt(
+     *   message.channel.id,
+     *   message,
+     *   message.reference ? referencedMessage.content : null
+     * );
+     * const response = await aiAgent.process(prompt);
+     */
     async buildContextPrompt(channelId, currentMessage, replyContext = null) {
         const context = await this.getContext(channelId);
 
@@ -86,11 +166,33 @@ class ContextService {
         return prompt;
     }
     
+    /**
+     * Clear conversation context for a channel
+     * 
+     * Removes in-memory context. MongoDB history is preserved for future retrieval.
+     * Useful for manual context resets or privacy compliance.
+     * 
+     * @param {string} channelId - Discord channel ID to clear context for
+     * @returns {Promise<void>}
+     * 
+     * @example
+     * await contextService.clearContext('123456789');
+     */
     async clearContext(channelId) {
         this.channelContexts.delete(channelId);
     }
     
-    // Prune old contexts (memory management)
+    /**
+     * Start automatic pruning job for inactive contexts
+     * 
+     * Runs every 15 minutes to remove in-memory contexts for channels
+     * with no activity in the last hour. Prevents memory leaks in busy bots.
+     * 
+     * Called automatically on service initialization.
+     * 
+     * @private
+     * @returns {void}
+     */
     startPruneJob() {
         setInterval(() => {
             const now = Date.now();

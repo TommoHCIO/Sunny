@@ -18,6 +18,15 @@ const anthropic = new Anthropic({
 // Load personality prompt once at startup
 let personalityPrompt = null;
 
+/**
+ * Load personality prompt from configuration file
+ * 
+ * Reads the personality.txt file and replaces placeholders with environment variables.
+ * Caches the result for subsequent calls to avoid repeated file reads.
+ * 
+ * @returns {Promise<string>} The personality prompt text with placeholders replaced
+ * @throws {Error} If file system operations fail (falls back to default personality)
+ */
 async function loadPersonality() {
     if (!personalityPrompt) {
         const promptPath = path.join(__dirname, '../../config/personality.txt');
@@ -37,6 +46,14 @@ async function loadPersonality() {
     return personalityPrompt;
 }
 
+/**
+ * Get default personality prompt
+ * 
+ * Provides a fallback personality prompt when personality.txt cannot be loaded.
+ * Used to ensure the bot always has a personality defined.
+ * 
+ * @returns {string} Default personality prompt for Sunny bot
+ */
 function getDefaultPersonality() {
     return `You are Sunny, the AI administrator and head moderator of The Nook, a cozy autumn-themed Discord community where everyone belongs.
 
@@ -49,12 +66,35 @@ Keep responses concise (2-4 sentences usually) but complete. Be genuinely helpfu
 
 /**
  * Run the AI agent with agentic loop
- * @param {string} userMessage - The user's message
- * @param {string} conversationContext - Recent conversation history
- * @param {Object} author - Discord user object
- * @param {Object} guild - Discord guild object
- * @param {Object} channel - Discord channel object (where message was sent)
- * @returns {Promise<string>} Final text response from Claude
+ * 
+ * Implements a multi-turn agentic loop where Claude can:
+ * 1. Analyze user input with conversation context
+ * 2. Use Discord management tools (list, modify, moderate)
+ * 3. Process tool results and decide next actions
+ * 4. Continue until task is complete or max iterations reached
+ * 
+ * The loop allows Claude to make intelligent, multi-step decisions like:
+ * - Inspecting server state before making changes
+ * - Setting up complex features (reaction roles, moderation)
+ * - Handling errors and retrying with different approaches
+ * 
+ * @param {string} userMessage - The user's message to process
+ * @param {string} conversationContext - Recent conversation history formatted as string
+ * @param {import('discord.js').User} author - Discord user who sent the message
+ * @param {import('discord.js').Guild} guild - Discord guild where message was sent
+ * @param {import('discord.js').TextChannel} channel - Discord channel where message was sent
+ * @returns {Promise<string>} Final text response from Claude to send to user
+ * @throws {Error} On API errors (handled gracefully with user-friendly messages)
+ * 
+ * @example
+ * const response = await runAgent(
+ *   "Set up a welcome role",
+ *   "Previous messages...",
+ *   message.author,
+ *   message.guild,
+ *   message.channel
+ * );
+ * await message.reply(response);
  */
 async function runAgent(userMessage, conversationContext, author, guild, channel) {
     const personality = await loadPersonality();
@@ -263,8 +303,13 @@ User message: ${userMessage}`;
 
 /**
  * Extract text content from Claude's response
- * @param {Object} response - Anthropic API response
- * @returns {string} Extracted text
+ * 
+ * Filters the response content blocks to extract only text blocks,
+ * ignoring tool_use blocks. Joins multiple text blocks with newlines.
+ * 
+ * @param {Object} response - Anthropic API response object
+ * @param {Array} response.content - Array of content blocks (text or tool_use)
+ * @returns {string} Extracted and joined text content, or default message if no text found
  */
 function extractTextFromResponse(response) {
     const textBlocks = response.content.filter(block => block.type === 'text');

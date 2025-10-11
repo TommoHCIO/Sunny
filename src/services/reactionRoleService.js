@@ -36,9 +36,39 @@ const reactionRoles = new Map();
 
 /**
  * Set up a reaction role binding
- * @param {Guild} guild - Discord guild object
- * @param {Object} input - Input parameters (messageId, channelName, emoji, roleName)
- * @returns {Object} Result object
+ * 
+ * Creates a mapping between a message reaction and a role assignment.
+ * When users react with the specified emoji, they automatically receive the role.
+ * 
+ * Process:
+ * 1. Validates input parameters using Zod schema
+ * 2. Locates the channel (by name or ID)
+ * 3. Finds or auto-creates the role
+ * 4. Adds bot's reaction to the message
+ * 5. Stores mapping in memory and MongoDB
+ * 
+ * @param {import('discord.js').Guild} guild - Discord guild where reaction role is being set up
+ * @param {Object} input - Configuration for the reaction role
+ * @param {string} input.messageId - Discord message ID (snowflake format, 17-19 digits)
+ * @param {string} [input.channelName] - Channel name or ID (optional, for validation)
+ * @param {string} input.emoji - Emoji to react with (Unicode or custom emoji)
+ * @param {string} input.roleName - Name of role to assign (will be created if doesn't exist)
+ * @returns {Promise<Object>} Result object with success status and details
+ * @returns {boolean} return.success - Whether operation succeeded
+ * @returns {string} [return.message] - Success message for user
+ * @returns {string} [return.error] - Error message if operation failed
+ * @returns {string} [return.message_id] - Message ID where reaction role was set up
+ * @returns {string} [return.emoji] - Emoji used for the reaction role
+ * @returns {string} [return.role] - Role name assigned
+ * 
+ * @example
+ * const result = await setupReactionRole(guild, {
+ *   messageId: '1234567890123456789',
+ *   channelName: 'welcome',
+ *   emoji: '👋',
+ *   roleName: 'Member'
+ * });
+ * console.log(result.message); // "Set up reaction role: React with 👋 to get the Member role"
  */
 async function setupReactionRole(guild, input) {
     try {
@@ -120,8 +150,24 @@ async function setupReactionRole(guild, input) {
 
 /**
  * Remove a reaction role binding
- * @param {Object} input - Input parameters (messageId, emoji)
- * @returns {Object} Result object
+ * 
+ * Deletes a specific reaction role mapping from both memory and database.
+ * Users will no longer receive the role when reacting with this emoji.
+ * 
+ * @param {Object} input - Parameters identifying which reaction role to remove
+ * @param {string} input.messageId - Discord message ID (snowflake format)
+ * @param {string} input.emoji - Emoji to remove from reaction roles
+ * @returns {Promise<Object>} Result object
+ * @returns {boolean} return.success - Whether operation succeeded
+ * @returns {string} [return.message] - Success message
+ * @returns {string} [return.error] - Error message if operation failed
+ * @returns {string} [return.role] - Name of role that was removed
+ * 
+ * @example
+ * const result = await removeReactionRole({
+ *   messageId: '1234567890123456789',
+ *   emoji: '👋'
+ * });
  */
 async function removeReactionRole(input) {
     try {
@@ -172,8 +218,25 @@ async function removeReactionRole(input) {
 
 /**
  * List all reaction roles in the server
- * @param {Guild} guild - Discord guild object
- * @returns {Object} Result object with list of reaction roles
+ * 
+ * Returns all currently configured reaction role mappings for the guild.
+ * 
+ * @param {import('discord.js').Guild} guild - Discord guild to query
+ * @returns {Promise<Object>} Result object containing reaction role list
+ * @returns {boolean} return.success - Whether operation succeeded
+ * @returns {Array<Object>} return.reaction_roles - Array of reaction role configurations
+ * @returns {string} return.reaction_roles[].message_id - Message ID
+ * @returns {string} return.reaction_roles[].emoji - Emoji used
+ * @returns {string} return.reaction_roles[].role - Role name assigned
+ * @returns {number} return.total - Total count of reaction roles
+ * @returns {string} [return.error] - Error message if operation failed
+ * 
+ * @example
+ * const result = await listReactionRoles(guild);
+ * console.log(`Found ${result.total} reaction roles`);
+ * result.reaction_roles.forEach(rr => {
+ *   console.log(`${rr.emoji} → ${rr.role}`);
+ * });
  */
 async function listReactionRoles(guild) {
     try {
@@ -201,9 +264,21 @@ async function listReactionRoles(guild) {
 
 /**
  * Handle reaction add event - assign role to user
- * @param {MessageReaction} reaction - The reaction object
- * @param {User} user - The user who reacted
- * @param {Guild} guild - The guild object
+ * 
+ * Automatically called when a user adds a reaction to a message.
+ * Checks if the reaction matches a configured reaction role and assigns
+ * the corresponding role to the user.
+ * 
+ * @param {import('discord.js').MessageReaction} reaction - Discord reaction object
+ * @param {import('discord.js').User} user - User who added the reaction
+ * @param {import('discord.js').Guild} guild - Guild where reaction occurred
+ * @returns {Promise<void>}
+ * 
+ * @example
+ * // Called automatically by Discord.js event handler
+ * client.on('messageReactionAdd', async (reaction, user) => {
+ *   await handleReactionAdd(reaction, user, reaction.message.guild);
+ * });
  */
 async function handleReactionAdd(reaction, user, guild) {
     try {
@@ -243,9 +318,21 @@ async function handleReactionAdd(reaction, user, guild) {
 
 /**
  * Handle reaction remove event - remove role from user
- * @param {MessageReaction} reaction - The reaction object
- * @param {User} user - The user who removed their reaction
- * @param {Guild} guild - The guild object
+ * 
+ * Automatically called when a user removes a reaction from a message.
+ * Checks if the reaction matches a configured reaction role and removes
+ * the corresponding role from the user.
+ * 
+ * @param {import('discord.js').MessageReaction} reaction - Discord reaction object
+ * @param {import('discord.js').User} user - User who removed the reaction
+ * @param {import('discord.js').Guild} guild - Guild where reaction was removed
+ * @returns {Promise<void>}
+ * 
+ * @example
+ * // Called automatically by Discord.js event handler
+ * client.on('messageReactionRemove', async (reaction, user) => {
+ *   await handleReactionRemove(reaction, user, reaction.message.guild);
+ * });
  */
 async function handleReactionRemove(reaction, user, guild) {
     try {
@@ -285,7 +372,24 @@ async function handleReactionRemove(reaction, user, guild) {
 
 /**
  * Load all reaction roles from database on bot startup
- * @param {Client} client - Discord client object
+ * 
+ * Initializes the in-memory reaction role cache from persistent storage.
+ * Should be called once during bot initialization to restore reaction roles
+ * that were configured before the bot restarted.
+ * 
+ * @param {import('discord.js').Client} client - Discord client instance
+ * @returns {Promise<Object>} Result object with load statistics
+ * @returns {boolean} return.success - Whether operation succeeded
+ * @returns {number} return.count - Number of reaction roles loaded
+ * @returns {number} [return.errors] - Number of reaction roles that failed to load
+ * @returns {string} [return.error] - Error message if operation failed
+ * 
+ * @example
+ * // During bot startup
+ * client.once('ready', async () => {
+ *   const result = await loadReactionRoles(client);
+ *   console.log(`Loaded ${result.count} reaction roles`);
+ * });
  */
 async function loadReactionRoles(client) {
     try {

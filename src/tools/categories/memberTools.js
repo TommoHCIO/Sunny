@@ -1,0 +1,257 @@
+// src/tools/categories/memberTools.js
+/**
+ * Discord Member Management Tools
+ * 
+ * Tools for member management, moderation actions, and member information retrieval.
+ * Includes timeouts, kicks, bans, nickname management, and detailed member lookups.
+ * 
+ * @module memberTools
+ */
+
+/**
+ * Get all Discord member management tools
+ * @param {Guild} guild - Discord guild object for context
+ * @returns {Array} Array of member tool definitions
+ */
+function getMemberTools(guild) {
+    return [
+        // ===== MEMBER MANAGEMENT TOOLS =====
+        {
+            name: "timeout_member",
+            description: "Timeout (mute) a member for a specified duration. Autonomous moderation action - can be used without owner permission for short timeouts.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    userId: {
+                        type: "string",
+                        description: "Discord user ID of the member to timeout"
+                    },
+                    duration: {
+                        type: "number",
+                        description: "Duration in minutes (max 1440 for 24 hours)"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Reason for the timeout"
+                    }
+                },
+                required: ["userId", "duration", "reason"]
+            }
+        },
+        {
+            name: "kick_member",
+            description: "Kick a member from the server. They can rejoin with a new invite. Requires owner permissions.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    userId: {
+                        type: "string",
+                        description: "Discord user ID of the member to kick"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Reason for kicking"
+                    }
+                },
+                required: ["userId", "reason"]
+            }
+        },
+        {
+            name: "set_nickname",
+            description: "Set or change a member's nickname. Requires owner permissions.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    userId: {
+                        type: "string",
+                        description: "Discord user ID of the member"
+                    },
+                    nickname: {
+                        type: "string",
+                        description: "New nickname (empty string to remove nickname)"
+                    }
+                },
+                required: ["userId", "nickname"]
+            }
+        },
+
+        // ===== MEMBER MANAGEMENT TOOLS (ADVANCED) =====
+        {
+            name: "get_member_info",
+            description: "Get detailed information about a specific member including username, roles, join date, permissions, timeout status, and voice state.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    userId: {
+                        type: "string",
+                        description: "Discord user ID of the member"
+                    }
+                },
+                required: ["userId"]
+            }
+        },
+        {
+            name: "get_member_roles",
+            description: "Get all roles assigned to a member with detailed information including permissions, colors, and positions.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    userId: {
+                        type: "string",
+                        description: "Discord user ID of the member"
+                    }
+                },
+                required: ["userId"]
+            }
+        },
+        {
+            name: "get_member_permissions",
+            description: "Get all permissions for a specific member including key moderation permissions.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    userId: {
+                        type: "string",
+                        description: "Discord user ID of the member"
+                    }
+                },
+                required: ["userId"]
+            }
+        },
+        {
+            name: "list_members_with_role",
+            description: "List all members who have a specific role. Shows username, display name, bot status, join date, and admin status.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    roleId: {
+                        type: "string",
+                        description: "Role ID to search for"
+                    }
+                },
+                required: ["roleId"]
+            }
+        },
+        {
+            name: "search_members",
+            description: "Search for members by username, display name, or nickname. Useful for finding specific users.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    query: {
+                        type: "string",
+                        description: "Search query (partial match)"
+                    },
+                    limit: {
+                        type: "number",
+                        description: "Maximum results to return (default: 25)"
+                    }
+                },
+                required: ["query"]
+            }
+        },
+
+        // ===== ADVANCED MODERATION TOOLS =====
+        {
+            name: "list_timeouts",
+            description: "List all currently timed-out members with their timeout duration and remaining time.",
+            input_schema: {
+                type: "object",
+                properties: {},
+                required: []
+            }
+        },
+        {
+            name: "remove_timeout",
+            description: "Remove an active timeout from a member. Requires Moderate Members permission.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    userId: {
+                        type: "string",
+                        description: "Discord user ID of the member"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Reason for removing timeout (default: 'Timeout removed by Sunny')"
+                    }
+                },
+                required: ["userId"]
+            }
+        },
+        {
+            name: "get_audit_log",
+            description: "Get detailed audit log entries showing recent moderation actions, channel changes, role updates, and more. Can filter by action type and user.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    limit: {
+                        type: "number",
+                        description: "Number of entries to fetch (default: 25)"
+                    },
+                    actionType: {
+                        type: "string",
+                        enum: ["timeout", "kick", "ban", "unban", "role_update", "channel_create", "channel_delete", "message_delete", "member_prune"],
+                        description: "Filter by specific action type"
+                    },
+                    userId: {
+                        type: "string",
+                        description: "Filter by executor user ID"
+                    }
+                },
+                required: []
+            }
+        },
+        {
+            name: "ban_member",
+            description: "Ban a member from the server permanently. Cannot ban server owner or administrators. Requires Ban Members permission.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    userId: {
+                        type: "string",
+                        description: "Discord user ID of the member to ban"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Reason for the ban (default: 'Banned by Sunny')"
+                    },
+                    deleteMessageDays: {
+                        type: "number",
+                        description: "Delete messages from the last N days (0-7, default: 0)"
+                    }
+                },
+                required: ["userId"]
+            }
+        },
+        {
+            name: "unban_member",
+            description: "Remove a ban from a user, allowing them to rejoin. Requires Ban Members permission.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    userId: {
+                        type: "string",
+                        description: "Discord user ID of the banned member"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Reason for unbanning (default: 'Unbanned by Sunny')"
+                    }
+                },
+                required: ["userId"]
+            }
+        },
+        {
+            name: "get_bans",
+            description: "List all banned users in the server. Requires owner permissions.",
+            input_schema: {
+                type: "object",
+                properties: {},
+                required: []
+            }
+        }
+    ];
+}
+
+module.exports = { getMemberTools };

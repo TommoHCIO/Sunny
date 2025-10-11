@@ -30,14 +30,22 @@ const logger = winston.createLogger({
 // Structure: { userId_guildId: { count: number, warnings: Array, lastWarning: Date } }
 const warningCache = new Map();
 
-// Timeout durations in milliseconds
+/**
+ * Timeout durations in milliseconds for escalating punishments
+ * - FIRST: 5 minutes for first offense
+ * - SECOND: 1 hour for second offense
+ * - THIRD: 1 day for third+ offense or severe violations
+ */
 const TIMEOUT_DURATIONS = {
     FIRST: 5 * 60 * 1000,      // 5 minutes
     SECOND: 60 * 60 * 1000,    // 1 hour
     THIRD: 24 * 60 * 60 * 1000 // 1 day
 };
 
-// Harmful behavior patterns
+/**
+ * Regular expression patterns for detecting harmful behavior
+ * Organized by severity level (high → low)
+ */
 const HARMFUL_PATTERNS = {
     SEVERE_THREATS: [
         /kill\s+yourself/i,
@@ -64,14 +72,36 @@ const HARMFUL_PATTERNS = {
 };
 
 /**
- * Get warning cache key
+ * Get warning cache key for in-memory storage
+ * 
+ * Creates a unique identifier for storing user warnings in the cache.
+ * 
+ * @param {string} userId - Discord user ID
+ * @param {string} guildId - Discord guild ID
+ * @returns {string} Cache key in format "userId_guildId"
+ * @private
  */
 function getCacheKey(userId, guildId) {
     return `${userId}_${guildId}`;
 }
 
 /**
- * Get user's warning history (MongoDB with in-memory fallback)
+ * Get user's warning history
+ * 
+ * Retrieves active warnings for a user, preferring MongoDB but falling back
+ * to in-memory cache if database is unavailable. Only returns warnings that
+ * haven't expired (default 30 day expiration).
+ * 
+ * @param {string} userId - Discord user ID to query
+ * @param {string} guildId - Discord guild ID to query
+ * @returns {Promise<Object>} Warning history object
+ * @returns {number} return.count - Number of active warnings
+ * @returns {Array<Object>} return.warnings - Array of warning details
+ * @returns {string} return.warnings[].reason - Reason for warning
+ * @returns {string} return.warnings[].severity - Severity level (low/medium/high)
+ * @returns {Date} return.warnings[].timestamp - When warning was issued
+ * @returns {Date} return.warnings[].expires - When warning expires
+ * @returns {Date|null} return.lastWarning - Timestamp of most recent warning
  */
 async function getWarnings(userId, guildId) {
     // Try MongoDB first
@@ -96,7 +126,23 @@ async function getWarnings(userId, guildId) {
 }
 
 /**
- * Add warning to user's history (MongoDB with in-memory fallback)
+ * Add warning to user's history
+ * 
+ * Records a new warning for a user in MongoDB (with in-memory fallback).
+ * Warnings automatically expire after 30 days.
+ * 
+ * @param {string} userId - Discord user ID
+ * @param {string} guildId - Discord guild ID
+ * @param {string} reason - Reason for the warning
+ * @param {string} [severity='medium'] - Severity level: 'low', 'medium', or 'high'
+ * @param {Object} [options={}] - Additional warning metadata
+ * @param {string} [options.action] - Action taken (e.g., 'timeout', 'warning')
+ * @param {number} [options.duration] - Duration of timeout if applicable
+ * @param {string} [options.messageContent] - Content that triggered the warning
+ * @param {string} [options.channelId] - Channel where violation occurred
+ * @param {string} [options.moderator] - Moderator who issued warning (default: 'autonomous')
+ * @returns {Promise<Object>} Updated warning history object
+ * @private
  */
 async function addWarning(userId, guildId, reason, severity = 'medium', options = {}) {
     // Try MongoDB first
@@ -130,7 +176,12 @@ async function addWarning(userId, guildId, reason, severity = 'medium', options 
 }
 
 /**
- * Clean expired warnings
+ * Clean expired warnings from in-memory cache
+ * 
+ * Runs periodically (every hour) to remove warnings past their expiration date.
+ * MongoDB cleanup is handled by the database service.
+ * 
+ * @private
  */
 function cleanExpiredWarnings() {
     const now = new Date();
@@ -149,8 +200,28 @@ function cleanExpiredWarnings() {
 setInterval(cleanExpiredWarnings, 60 * 60 * 1000);
 
 /**
- * Detect harmful behavior in message
- * @returns {Object|null} { severity: 'low'|'medium'|'high', reason: string, pattern: string }
+ * Detect harmful behavior in message content
+ * 
+ * Scans message content against predefined patterns for harmful behavior,
+ * checking in order of severity (high to low). Returns details of first match.
+ * 
+ * Severity levels:
+ * - high: Severe threats, self-harm encouragement (immediate 1-day timeout)
+ * - medium: Threats, severe insults (escalating timeouts)
+ * - low: Harassment, disrespectful language (escalating timeouts)
+ * 
+ * @param {string} content - Message content to analyze
+ * @returns {Object|null} Violation details if harmful behavior detected, null otherwise
+ * @returns {string} return.severity - Severity level: 'low', 'medium', or 'high'
+ * @returns {string} return.reason - Human-readable reason for detection
+ * @returns {string} return.pattern - Regular expression pattern that matched
+ * 
+ * @example
+ * const violation = detectHarmfulBehavior("You suck balls");
+ * if (violation) {
+ *   console.log(violation.severity); // "medium"
+ *   console.log(violation.reason); // "Severe insult or profanity"
+ * }
  */
 function detectHarmfulBehavior(content) {
     // Check severe threats first (highest priority)
@@ -202,6 +273,17 @@ function detectHarmfulBehavior(content) {
 
 /**
  * Calculate timeout duration based on warning history
+ * 
+ * Implements escalating punishment system:
+ * - First offense: 5 minutes (unless severity is 'high')
+ * - Second offense: 1 hour (unless severity is 'high')
+ * - Third+ offense: 1 day
+ * - High severity: Always 1 day regardless of history
+ * 
+ * @param {number} warningCount - Number of existing warnings (before this one)
+ * @param {string} severity - Severity level: 'low', 'medium', or 'high'
+ * @returns {number} Timeout duration in milliseconds
+ * @private
  */
 function calculateTimeoutDuration(warningCount, severity) {
     // Severe violations get longer timeouts immediately
@@ -221,6 +303,12 @@ function calculateTimeoutDuration(warningCount, severity) {
 
 /**
  * Format duration for user-friendly display
+ * 
+ * Converts milliseconds to human-readable format (days, hours, or minutes).
+ * 
+ * @param {number} milliseconds - Duration in milliseconds
+ * @returns {string} Formatted duration (e.g., "5 minutes", "1 hour", "2 days")
+ * @private
  */
 function formatDuration(milliseconds) {
     const minutes = Math.floor(milliseconds / 60000);
@@ -234,9 +322,37 @@ function formatDuration(milliseconds) {
 
 /**
  * Apply autonomous timeout to user
- * @param {Message} message - Discord message object
+ * 
+ * Automatically times out a user based on detected violation and warning history.
+ * Implements escalating punishment system with educational messaging.
+ * 
+ * Process:
+ * 1. Checks bot permissions
+ * 2. Skips administrators and owners
+ * 3. Retrieves warning history
+ * 4. Adds new warning to record
+ * 5. Calculates timeout duration based on history and severity
+ * 6. Applies timeout to user
+ * 7. Returns appropriate user-facing message
+ * 
+ * @param {import('discord.js').Message} message - Discord message that triggered violation
  * @param {Object} violation - Violation details from detectHarmfulBehavior
- * @returns {Promise<Object>} { success: boolean, action: string, duration: string, message: string }
+ * @param {string} violation.severity - Severity level: 'low', 'medium', or 'high'
+ * @param {string} violation.reason - Reason for the violation
+ * @param {string} violation.pattern - Regex pattern that matched
+ * @returns {Promise<Object>} Result object with action details
+ * @returns {boolean} return.success - Whether timeout was applied successfully
+ * @returns {string} return.action - Action taken: 'timeout', 'none', or 'error'
+ * @returns {string} [return.duration] - Formatted timeout duration (e.g., "5 minutes")
+ * @returns {number} [return.warningCount] - Total warnings after this one
+ * @returns {string} return.message - User-facing message explaining the action
+ * 
+ * @example
+ * const violation = detectHarmfulBehavior(message.content);
+ * if (violation) {
+ *   const result = await applyAutonomousTimeout(message, violation);
+ *   await message.channel.send(result.message);
+ * }
  */
 async function applyAutonomousTimeout(message, violation) {
     const { guild, author, content } = message;
@@ -321,7 +437,27 @@ async function applyAutonomousTimeout(message, violation) {
 
 /**
  * Check message for violations and take action if needed
- * Returns action taken (if any)
+ * 
+ * Main entry point for autonomous moderation. Analyzes message content
+ * and applies appropriate action if harmful behavior is detected.
+ * 
+ * Automatically called by message event handler. Ignores:
+ * - Bot messages
+ * - Direct messages (DMs)
+ * 
+ * @param {import('discord.js').Message} message - Discord message to check
+ * @returns {Promise<Object|null>} Result object if action taken, null if no violation
+ * @returns {boolean} return.success - Whether action succeeded
+ * @returns {string} return.action - Action taken: 'timeout', 'none', or 'error'
+ * @returns {string} return.message - User-facing message
+ * 
+ * @example
+ * client.on('messageCreate', async (message) => {
+ *   const result = await checkMessage(message);
+ *   if (result && result.success) {
+ *     await message.channel.send(result.message);
+ *   }
+ * });
  */
 async function checkMessage(message) {
     // Don't moderate bots
@@ -343,7 +479,25 @@ async function checkMessage(message) {
 }
 
 /**
- * Get moderation statistics for a guild (MongoDB with in-memory fallback)
+ * Get moderation statistics for a guild
+ * 
+ * Returns statistics about moderation actions taken within a time range.
+ * Prefers MongoDB but falls back to in-memory cache if database unavailable.
+ * 
+ * @param {string} guildId - Discord guild ID to query
+ * @param {string} [timeRange='24h'] - Time range for statistics: '24h', '7d', '30d', or 'all'
+ * @returns {Promise<Object>} Statistics object
+ * @returns {number} return.total_warnings - Total warnings issued in time range
+ * @returns {number} return.active_warnings - Currently active (non-expired) warnings
+ * @returns {number} return.users_flagged - Unique users with warnings
+ * @returns {Array<Object>} [return.action_breakdown] - Breakdown by action type (MongoDB only)
+ * @returns {string} return.timeRange - Time range queried
+ * @returns {string} return.source - Data source: 'mongodb' or 'cache'
+ * 
+ * @example
+ * const stats = await getStats('1234567890', '7d');
+ * console.log(`${stats.total_warnings} warnings in the last 7 days`);
+ * console.log(`${stats.users_flagged} unique users flagged`);
  */
 async function getStats(guildId, timeRange = '24h') {
     // Try MongoDB first
