@@ -5,6 +5,7 @@ const contextService = require('../services/contextService');
 const debugService = require('../services/debugService');
 const messageTracker = require('../utils/messageTracker');
 const moderationService = require('../services/moderationService');
+const statusService = require('../services/statusService');
 
 // Bot startup time - used to filter out old messages
 const BOT_START_TIME = Date.now();
@@ -113,6 +114,10 @@ module.exports = async function handleMessage(client, message) {
     // Show typing indicator
     await message.channel.sendTyping();
 
+    // Start visual status tracking
+    let statusTracker = null;
+    statusTracker = await statusService.start(message);
+
     try {
         await debugService.logMessageFlow('processing', message.id, {
             'Building Context': 'Fetching conversation history...'
@@ -166,6 +171,11 @@ module.exports = async function handleMessage(client, message) {
                 'Execution ID': executionId
             }, executionId);
 
+            // Stop and delete status message before sending final response
+            if (statusTracker) {
+                await statusTracker.stop();
+            }
+
             console.log(`💬 Sending reply to Discord...`);
             console.log(`   Instance watermark: ${instanceInfo.instanceId} | PID: ${instanceInfo.pid}`);
             
@@ -205,7 +215,12 @@ module.exports = async function handleMessage(client, message) {
 
     } catch (error) {
         console.error('Error handling Sunny interaction:', error);
-        
+
+        // Stop status tracking on error
+        if (statusTracker) {
+            await statusTracker.stop();
+        }
+
         await debugService.logError(error, {
             'Message ID': message.id,
             'Author': message.author.tag,
