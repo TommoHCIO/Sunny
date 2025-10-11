@@ -378,20 +378,6 @@ function getDiscordTools(guild) {
             }
         },
         {
-            name: "remove_timeout",
-            description: "Remove an active timeout from a member. Requires owner permissions.",
-            input_schema: {
-                type: "object",
-                properties: {
-                    userId: {
-                        type: "string",
-                        description: "Discord user ID of the member"
-                    }
-                },
-                required: ["userId"]
-            }
-        },
-        {
             name: "kick_member",
             description: "Kick a member from the server. They can rejoin with a new invite. Requires owner permissions.",
             input_schema: {
@@ -407,42 +393,6 @@ function getDiscordTools(guild) {
                     }
                 },
                 required: ["userId", "reason"]
-            }
-        },
-        {
-            name: "ban_member",
-            description: "Ban a member from the server permanently. Requires owner permissions.",
-            input_schema: {
-                type: "object",
-                properties: {
-                    userId: {
-                        type: "string",
-                        description: "Discord user ID of the member to ban"
-                    },
-                    reason: {
-                        type: "string",
-                        description: "Reason for the ban"
-                    },
-                    deleteMessageDays: {
-                        type: "number",
-                        description: "Number of days of messages to delete (0-7)"
-                    }
-                },
-                required: ["userId", "reason"]
-            }
-        },
-        {
-            name: "unban_member",
-            description: "Unban a previously banned member. Requires owner permissions.",
-            input_schema: {
-                type: "object",
-                properties: {
-                    userId: {
-                        type: "string",
-                        description: "Discord user ID of the banned member"
-                    }
-                },
-                required: ["userId"]
             }
         },
         {
