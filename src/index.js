@@ -61,19 +61,27 @@ const reactionRoleService = require('./services/reactionRoleService');
 const moderationService = require('./services/moderationService');
 const databaseService = require('./services/database/databaseService');
 
-// Connect to MongoDB
-if (process.env.MONGODB_URI) {
-    mongoose.connect(process.env.MONGODB_URI)
-    .then(() => {
-        logger.info('✅ Connected to MongoDB');
-    })
-    .catch((error) => {
-        logger.error('❌ MongoDB connection error:', error);
-        logger.warn('⚠️  Bot will run without database (context won\'t persist)');
-    });
-} else {
-    logger.warn('⚠️  MONGODB_URI not set - running without database');
-}
+// Connect to MongoDB (async function to await connection)
+let mongoConnected = false;
+const connectMongoDB = async () => {
+    if (process.env.MONGODB_URI) {
+        try {
+            await mongoose.connect(process.env.MONGODB_URI);
+            logger.info('✅ Connected to MongoDB');
+            mongoConnected = true;
+        } catch (error) {
+            logger.error('❌ MongoDB connection error:', error);
+            logger.warn('⚠️  Bot will run without database (context won\'t persist)');
+            mongoConnected = false;
+        }
+    } else {
+        logger.warn('⚠️  MONGODB_URI not set - running without database');
+        mongoConnected = false;
+    }
+};
+
+// Start MongoDB connection (don't await here, will await in ready event)
+connectMongoDB();
 
 // Bot ready event
 client.once('ready', async () => {
@@ -117,11 +125,28 @@ client.once('ready', async () => {
         logger.error('⚠️  Failed to initialize debug monitoring:', error);
     }
     
+    // Wait for MongoDB connection to complete before loading reaction roles
+    // This ensures we don't try to load from DB before connection is ready
+    let retries = 0;
+    const maxRetries = 10;
+    while (!mongoConnected && retries < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms
+        retries++;
+    }
+    
+    if (mongoConnected) {
+        logger.info('⏳ MongoDB ready, loading reaction roles...');
+    } else {
+        logger.warn('⚠️  MongoDB not connected, skipping reaction role load');
+    }
+    
     // Load reaction roles from database
     try {
         const result = await reactionRoleService.loadReactionRoles(client);
         if (result.success && result.count > 0) {
             logger.info(`✅ Loaded ${result.count} reaction role(s) from database`);
+        } else if (result.count === 0) {
+            logger.info('📭 No reaction roles in database');
         }
     } catch (error) {
         logger.error('⚠️  Failed to load reaction roles:', error);
