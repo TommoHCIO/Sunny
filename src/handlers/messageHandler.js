@@ -168,8 +168,23 @@ module.exports = async function handleMessage(client, message) {
 
             console.log(`💬 Sending reply to Discord...`);
             console.log(`   Instance watermark: ${instanceInfo.instanceId} | PID: ${instanceInfo.pid}`);
-            const sentMessage = await message.reply(responseWithWatermark);
-            console.log(`✅ Reply sent! Message ID: ${sentMessage.id}`);
+            
+            // Try to reply to the message, but fall back to sending if the message was deleted
+            let sentMessage;
+            try {
+                sentMessage = await message.reply(responseWithWatermark);
+                console.log(`✅ Reply sent! Message ID: ${sentMessage.id}`);
+            } catch (replyError) {
+                // If the message was deleted (common after purge operations), send as standalone
+                if (replyError.code === 50035 || replyError.code === 10008) {
+                    console.log(`⚠️  Original message deleted, sending as standalone message`);
+                    sentMessage = await message.channel.send(responseWithWatermark);
+                    console.log(`✅ Standalone message sent! Message ID: ${sentMessage.id}`);
+                } else {
+                    // Re-throw other errors
+                    throw replyError;
+                }
+            }
 
             await debugService.logMessageFlow('sent', message.id, {
                 'Reply Message ID': sentMessage.id,
@@ -198,9 +213,21 @@ module.exports = async function handleMessage(client, message) {
             'Processing Time': `${Date.now() - startTime}ms`
         }, executionId);
 
-        await message.reply(
-            "Oops! Something went wrong on my end 🍂 Let me try again or ask our server owner for help if this keeps happening!"
-        ).catch(err => console.error('Could not send error message:', err));
+        // Try to send error message, fall back to channel send if reply fails
+        try {
+            await message.reply(
+                "Oops! Something went wrong on my end 🍂 Let me try again or ask our server owner for help if this keeps happening!"
+            );
+        } catch (replyError) {
+            // If message was deleted, send to channel instead
+            if (replyError.code === 50035 || replyError.code === 10008) {
+                await message.channel.send(
+                    "Oops! Something went wrong on my end 🍂 Let me try again or ask our server owner for help if this keeps happening!"
+                ).catch(err => console.error('Could not send error message:', err));
+            } else {
+                console.error('Could not send error message:', replyError);
+            }
+        }
     }
 };
 
