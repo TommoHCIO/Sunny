@@ -8,6 +8,10 @@ const http = require('http');
 // Load environment variables
 dotenv.config();
 
+// Validate environment before proceeding
+const { validateOrExit } = require('./config/validator');
+const validatedConfig = validateOrExit();
+
 // Configure logger
 const logger = winston.createLogger({
     level: process.env.LOG_LEVEL || 'info',
@@ -244,17 +248,115 @@ client.on('resume', async () => {
     await debugService.logEvent('resume', { timestamp: new Date().toISOString() });
 });
 
+// Enhanced error handling with categorization
 process.on('unhandledRejection', async (error) => {
-    logger.error('Unhandled promise rejection:', error);
-    await debugService.logError(error, { source: 'Unhandled Rejection' });
+    logger.error('❌ Unhandled promise rejection:', {
+        error: error.message,
+        stack: error.stack,
+        name: error.name,
+        code: error.code
+    });
+    
+    // Categorize Discord API errors
+    if (error.code) {
+        const errorCategory = categorizeDiscordError(error.code);
+        logger.error(`   Category: ${errorCategory}`);
+    }
+    
+    await debugService.logError(error, { 
+        source: 'Unhandled Rejection',
+        severity: 'critical'
+    });
+    
+    // Exit on fatal errors only
+    if (error.code === 'FATAL' || error.name === 'MongoServerError') {
+        logger.error('   Fatal error detected, exiting in 2s...');
+        setTimeout(() => process.exit(1), 2000);
+    }
 });
 
 process.on('uncaughtException', async (error) => {
-    logger.error('Uncaught exception:', error);
-    await debugService.logError(error, { source: 'Uncaught Exception' });
+    logger.error('❌ Uncaught exception:', {
+        error: error.message,
+        stack: error.stack,
+        name: error.name
+    });
+    await debugService.logError(error, { 
+        source: 'Uncaught Exception',
+        severity: 'critical' 
+    });
     // Don't exit immediately - give time for log to send
     setTimeout(() => process.exit(1), 1000);
 });
+
+// Handle Discord WebSocket/Shard errors
+client.on('shardError', async (error, shardId) => {
+    logger.error(`🌐 WebSocket error on shard ${shardId}:`, {
+        error: error.message,
+        code: error.code,
+        shard: shardId
+    });
+    
+    await debugService.logError(error, {
+        source: 'WebSocket',
+        shardId,
+        severity: 'high'
+    });
+});
+
+// Handle rate limiting (for monitoring)
+client.rest.on('rateLimited', (info) => {
+    logger.warn('⏱️  Rate limited:', {
+        timeout: `${info.timeout}ms`,
+        limit: info.limit,
+        method: info.method,
+        path: info.path,
+        route: info.route,
+        global: info.global
+    });
+    
+    // Log rate limit events to debug channel (non-blocking)
+    debugService.logEvent('rate_limit', {
+        timeout: info.timeout,
+        method: info.method,
+        route: info.route,
+        timestamp: new Date().toISOString()
+    }).catch(err => {
+        logger.error('Failed to log rate limit event:', err);
+    });
+});
+
+// Discord API error categorization helper
+function categorizeDiscordError(code) {
+    const categories = {
+        // Permission errors
+        50001: 'Missing Access',
+        50013: 'Missing Permissions',
+        50021: 'Cannot execute action on system message',
+        
+        // Resource errors
+        10003: 'Unknown Channel',
+        10004: 'Unknown Guild',
+        10008: 'Unknown Message',
+        10011: 'Unknown Role',
+        10013: 'Unknown User',
+        10014: 'Unknown Emoji',
+        
+        // Rate limit errors
+        429: 'Rate Limited',
+        
+        // Validation errors
+        50035: 'Invalid Form Body',
+        50036: 'Invalid Message Target',
+        
+        // Other errors
+        40060: 'Interaction Already Acknowledged',
+        30001: 'Maximum number of guilds reached',
+        30013: 'Maximum number of reactions reached'
+    };
+    
+    return categories[code] || `Unknown Error (${code})`;
+}
 
 // Health check endpoint for Render.com (required for free tier)
 const PORT = process.env.PORT || 3000;

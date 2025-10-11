@@ -5,7 +5,30 @@
  * Now with MongoDB persistence for reliability across bot restarts
  */
 
+const { z } = require('zod');
 const databaseService = require('./database/databaseService');
+
+// Input validation schemas
+const setupReactionRoleSchema = z.object({
+    messageId: z.string()
+        .regex(/^\d{17,19}$/, 'Message ID must be a valid Discord snowflake (17-19 digits)'),
+    channelName: z.string()
+        .min(1, 'Channel name/ID cannot be empty')
+        .optional(),
+    emoji: z.string()
+        .min(1, 'Emoji cannot be empty')
+        .max(100, 'Emoji too long'),
+    roleName: z.string()
+        .min(1, 'Role name cannot be empty')
+        .max(100, 'Role name too long (max 100 characters)')
+});
+
+const removeReactionRoleSchema = z.object({
+    messageId: z.string()
+        .regex(/^\d{17,19}$/, 'Message ID must be a valid Discord snowflake'),
+    emoji: z.string()
+        .min(1, 'Emoji cannot be empty')
+});
 
 // In-memory storage for reaction roles (for fast lookup)
 // Format: { messageId: { emoji: roleName } }
@@ -19,7 +42,17 @@ const reactionRoles = new Map();
  */
 async function setupReactionRole(guild, input) {
     try {
-        const { messageId, channelName, emoji, roleName } = input;
+        // Validate input
+        const validationResult = setupReactionRoleSchema.safeParse(input);
+        if (!validationResult.success) {
+            const errors = validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
+            return { 
+                success: false, 
+                error: `Input validation failed: ${errors.join(', ')}` 
+            };
+        }
+        
+        const { messageId, channelName, emoji, roleName } = validationResult.data;
 
         // Find the channel - handles both channel names and IDs
         let channel = null;
@@ -92,7 +125,17 @@ async function setupReactionRole(guild, input) {
  */
 async function removeReactionRole(input) {
     try {
-        const { messageId, emoji } = input;
+        // Validate input
+        const validationResult = removeReactionRoleSchema.safeParse(input);
+        if (!validationResult.success) {
+            const errors = validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
+            return { 
+                success: false, 
+                error: `Input validation failed: ${errors.join(', ')}` 
+            };
+        }
+        
+        const { messageId, emoji } = validationResult.data;
 
         if (!reactionRoles.has(messageId)) {
             return { success: false, error: `No reaction roles found for message ${messageId}` };
