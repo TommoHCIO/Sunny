@@ -4,21 +4,24 @@
  * Splits long Discord messages to respect the 4000 character limit
  */
 
-const DISCORD_MAX_LENGTH = 4000;
+const DISCORD_REPLY_MAX_LENGTH = 2000; // Discord replies have 2000 char limit
+const DISCORD_MESSAGE_MAX_LENGTH = 4000; // Regular messages have 4000 char limit
 const SPLIT_MARKER = '\n\n---\n\n';
 const CONTINUATION_PREFIX = '*(continued)*\n\n';
 
 /**
  * Split a message into multiple parts if it exceeds Discord's character limit
  *
+ * Note: First message is sent as reply (2000 char limit), subsequent as regular messages (4000 char limit)
+ *
  * @param {string} message - The message to split
  * @param {string} watermark - Instance watermark to append to final message only
- * @returns {string[]} Array of message parts, each under 4000 characters
+ * @returns {string[]} Array of message parts, respecting Discord's limits
  */
 function splitMessage(message, watermark = '') {
-    // If message + watermark fits in one message, return as-is
+    // If message + watermark fits in a reply, return as-is
     const totalLength = message.length + watermark.length;
-    if (totalLength <= DISCORD_MAX_LENGTH) {
+    if (totalLength <= DISCORD_REPLY_MAX_LENGTH) {
         return [message + watermark];
     }
 
@@ -27,9 +30,9 @@ function splitMessage(message, watermark = '') {
     const watermarkLength = watermark.length;
     const continuationLength = CONTINUATION_PREFIX.length;
 
-    // Calculate max length for first message and subsequent messages
-    const firstMaxLength = DISCORD_MAX_LENGTH - SPLIT_MARKER.length;
-    const subsequentMaxLength = DISCORD_MAX_LENGTH - continuationLength - watermarkLength;
+    // Calculate max length for first message (reply) and subsequent messages (regular)
+    const firstMaxLength = DISCORD_REPLY_MAX_LENGTH - SPLIT_MARKER.length;
+    const subsequentMaxLength = DISCORD_MESSAGE_MAX_LENGTH - continuationLength - watermarkLength;
 
     // Split first message
     if (remainingText.length > firstMaxLength) {
@@ -104,5 +107,6 @@ function findGoodSplitPoint(text, maxLength) {
 
 module.exports = {
     splitMessage,
-    DISCORD_MAX_LENGTH
+    DISCORD_REPLY_MAX_LENGTH,
+    DISCORD_MESSAGE_MAX_LENGTH
 };
