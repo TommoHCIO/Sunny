@@ -14,9 +14,23 @@ module.exports = async function handleMessage(client, message) {
     const executionId = debugService.generateExecutionId();
     const startTime = Date.now();
 
-    // Ignore bot messages (prevent loops) - do this FIRST before any logging
+    // Ignore bot messages EXCEPT whitelisted bots (prevent loops)
     if (message.author.bot) {
-        return; // Silent ignore, no logging
+        // Always ignore Sunny's own messages (prevent infinite loops)
+        if (message.author.id === client.user.id) {
+            return; // Silent ignore
+        }
+
+        // Check if this bot is whitelisted (e.g., Claudee for MCP integration)
+        const whitelistedBots = process.env.WHITELISTED_BOT_IDS
+            ? process.env.WHITELISTED_BOT_IDS.split(',').map(id => id.trim())
+            : [];
+
+        if (!whitelistedBots.includes(message.author.id)) {
+            return; // Ignore non-whitelisted bots
+        }
+
+        console.log(`✅ Processing message from whitelisted bot: ${message.author.tag}`);
     }
 
     // Ignore messages created before bot started (prevents processing old messages on startup)

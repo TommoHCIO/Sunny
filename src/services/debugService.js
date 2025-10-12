@@ -13,6 +13,7 @@ class DebugService {
 
     /**
      * Initialize debug channel - finds existing or creates new
+     * Priority: 1) DEBUG_CHANNEL_ID env var, 2) Find by name, 3) Create new
      */
     async initialize(client) {
         try {
@@ -23,27 +24,45 @@ class DebugService {
             }
 
             this.guild = guilds.first();
-            
-            // Look for existing debug channel
+
+            // Priority 1: Use DEBUG_CHANNEL_ID from environment if set
+            if (process.env.DEBUG_CHANNEL_ID) {
+                this.debugChannel = await this.guild.channels.fetch(process.env.DEBUG_CHANNEL_ID).catch(err => {
+                    console.warn(`⚠️  Could not fetch DEBUG_CHANNEL_ID ${process.env.DEBUG_CHANNEL_ID}: ${err.message}`);
+                    return null;
+                });
+
+                if (this.debugChannel) {
+                    console.log(`✅ Using existing debug channel from env: #${this.debugChannel.name} (${this.debugChannel.id})`);
+                    await this.logStartup();
+                    return;
+                }
+            }
+
+            // Priority 2: Look for existing debug channel by name
             this.debugChannel = this.guild.channels.cache.find(
                 ch => ch.name === 'sunny-debug' && ch.isTextBased()
             );
 
-            if (!this.debugChannel) {
-                console.log('📝 Creating sunny-debug channel...');
-                // Create channel without permission overwrites first (simpler, avoids caching issues)
-                this.debugChannel = await this.guild.channels.create({
-                    name: 'sunny-debug',
-                    topic: `🔍 Debug logs for Sunny | Instance: ${this.instanceId} | PID: ${process.pid}`,
-                });
-                console.log('✅ Debug channel created');
-                console.log(`   Instance ID: ${this.instanceId}`);
-                console.log(`   PID: ${process.pid}`);
+            if (this.debugChannel) {
+                console.log(`✅ Found existing sunny-debug channel: ${this.debugChannel.id}`);
+                console.log(`   💡 Add to .env: DEBUG_CHANNEL_ID=${this.debugChannel.id}`);
+                await this.logStartup();
+                return;
             }
+
+            // Priority 3: Create new channel only if nothing found
+            console.log('📝 Creating new sunny-debug channel...');
+            this.debugChannel = await this.guild.channels.create({
+                name: 'sunny-debug',
+                topic: `🔍 Debug logs for Sunny | Instance: ${this.instanceId} | PID: ${process.pid}`,
+            });
+            console.log(`✅ Debug channel created: ${this.debugChannel.id}`);
+            console.log(`   💡 Add to .env: DEBUG_CHANNEL_ID=${this.debugChannel.id}`);
 
             // Send startup message
             await this.logStartup();
-            
+
         } catch (error) {
             console.error('❌ Failed to initialize debug channel:', error);
         }
