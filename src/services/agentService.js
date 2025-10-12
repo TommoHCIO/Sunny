@@ -141,7 +141,7 @@ User message: ${userMessage}`;
 
     let loopCount = 0;
     const startTime = Date.now();
-    const maxTimeMs = 120000; // 2 minutes absolute safety limit
+    const maxTimeMs = 420000; // 7 minutes absolute safety limit
     const maxLoops = 50; // Soft limit, only for extreme edge cases
 
     try {
