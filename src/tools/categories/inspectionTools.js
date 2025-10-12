@@ -45,6 +45,10 @@ function getInspectionTools(guild) {
                     include_permissions: {
                         type: "boolean",
                         description: "Include detailed permission list for each role"
+                    },
+                    include_ids: {
+                        type: "boolean",
+                        description: "Include role IDs in the response (required for reordering roles)"
                     }
                 },
                 required: []

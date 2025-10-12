@@ -538,6 +538,7 @@ async function listChannels(guild, input) {
 async function listRoles(guild, input) {
     try {
         const includePermissions = input.include_permissions || false;
+        const includeIds = input.include_ids || false;
 
         const roles = Array.from(guild.roles.cache.values())
             .filter(r => r.name !== '@everyone')  // Exclude @everyone
@@ -550,6 +551,10 @@ async function listRoles(guild, input) {
                     hoisted: r.hoist,
                     mentionable: r.mentionable
                 };
+
+                if (includeIds) {
+                    info.id = r.id;
+                }
 
                 if (includePermissions) {
                     info.permissions = r.permissions.toArray();
