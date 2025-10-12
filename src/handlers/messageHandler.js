@@ -6,6 +6,7 @@ const debugService = require('../services/debugService');
 const messageTracker = require('../utils/messageTracker');
 const moderationService = require('../services/moderationService');
 const statusService = require('../services/statusService');
+const { splitMessage } = require('../utils/messageSplitter');
 
 // Bot startup time - used to filter out old messages
 const BOT_START_TIME = Date.now();
@@ -176,10 +177,14 @@ module.exports = async function handleMessage(client, message) {
             // Add instance watermark to track which instance sent this response
             const instanceInfo = debugService.getInstanceInfo();
             const watermark = `\n\n-# Instance: \`${instanceInfo.instanceId}\` | PID: \`${instanceInfo.pid}\` | Exec: \`${executionId.substring(0, 8)}\``;
-            const responseWithWatermark = finalResponse + watermark;
+
+            // Split message if it exceeds Discord's 4000 character limit
+            const messageParts = splitMessage(finalResponse, watermark);
 
             await debugService.logMessageFlow('sending', message.id, {
                 'Response': finalResponse.substring(0, 500),
+                'Response Length': `${finalResponse.length} chars`,
+                'Message Parts': messageParts.length,
                 'Instance ID': instanceInfo.instanceId,
                 'PID': instanceInfo.pid,
                 'Execution ID': executionId
@@ -191,33 +196,56 @@ module.exports = async function handleMessage(client, message) {
             }
 
             console.log(`💬 Sending reply to Discord...`);
+            console.log(`   Response length: ${finalResponse.length} chars`);
+            console.log(`   Split into ${messageParts.length} message(s)`);
             console.log(`   Instance watermark: ${instanceInfo.instanceId} | PID: ${instanceInfo.pid}`);
-            
-            // Try to reply to the message, but fall back to sending if the message was deleted
-            let sentMessage;
-            try {
-                sentMessage = await message.reply(responseWithWatermark);
-                console.log(`✅ Reply sent! Message ID: ${sentMessage.id}`);
-            } catch (replyError) {
-                // If the message was deleted (common after purge operations), send as standalone
-                if (replyError.code === 50035 || replyError.code === 10008) {
-                    console.log(`⚠️  Original message deleted, sending as standalone message`);
-                    sentMessage = await message.channel.send(responseWithWatermark);
-                    console.log(`✅ Standalone message sent! Message ID: ${sentMessage.id}`);
-                } else {
-                    // Re-throw other errors
-                    throw replyError;
+
+            // Send all message parts
+            let firstMessage = null;
+            const sentMessages = [];
+
+            for (let i = 0; i < messageParts.length; i++) {
+                const part = messageParts[i];
+                const isFirst = i === 0;
+
+                try {
+                    let sentMessage;
+                    if (isFirst) {
+                        // Reply to original message for first part
+                        sentMessage = await message.reply(part);
+                        firstMessage = sentMessage;
+                        console.log(`✅ Reply sent (part ${i + 1}/${messageParts.length})! Message ID: ${sentMessage.id}`);
+                    } else {
+                        // Send follow-up messages as regular messages
+                        sentMessage = await message.channel.send(part);
+                        console.log(`✅ Follow-up sent (part ${i + 1}/${messageParts.length})! Message ID: ${sentMessage.id}`);
+                    }
+                    sentMessages.push(sentMessage);
+                } catch (sendError) {
+                    // If the original message was deleted, send all parts as standalone
+                    if (isFirst && (sendError.code === 50035 || sendError.code === 10008)) {
+                        console.log(`⚠️  Original message deleted, sending as standalone message`);
+                        const sentMessage = await message.channel.send(part);
+                        sentMessages.push(sentMessage);
+                        console.log(`✅ Standalone message sent (part ${i + 1}/${messageParts.length})! Message ID: ${sentMessage.id}`);
+                    } else {
+                        // Re-throw other errors
+                        throw sendError;
+                    }
                 }
             }
 
             await debugService.logMessageFlow('sent', message.id, {
-                'Reply Message ID': sentMessage.id,
+                'Reply Message ID': firstMessage?.id || sentMessages[0]?.id,
+                'Message Count': sentMessages.length,
                 'Total Time': `${Date.now() - startTime}ms`,
                 'Instance ID': instanceInfo.instanceId
             }, executionId);
 
-            // Add Sunny's response to context
-            await contextService.addMessage(message.channel.id, sentMessage);
+            // Add all sent messages to context
+            for (const sentMessage of sentMessages) {
+                await contextService.addMessage(message.channel.id, sentMessage);
+            }
         } else {
             console.log(`⚠️  finalResponse was empty/null`);
             await debugService.logError(
