@@ -31,8 +31,9 @@ function splitMessage(message, watermark = '') {
     const continuationLength = CONTINUATION_PREFIX.length;
 
     // Calculate max length for first message (reply) and subsequent messages (regular)
-    const firstMaxLength = DISCORD_REPLY_MAX_LENGTH - SPLIT_MARKER.length;
-    const subsequentMaxLength = DISCORD_MESSAGE_MAX_LENGTH - continuationLength - watermarkLength;
+    // Use extra safety margin (100 chars) for Discord API overhead
+    const firstMaxLength = DISCORD_REPLY_MAX_LENGTH - SPLIT_MARKER.length - 100;
+    const subsequentMaxLength = DISCORD_MESSAGE_MAX_LENGTH - continuationLength - watermarkLength - 100;
 
     // Split first message
     if (remainingText.length > firstMaxLength) {
