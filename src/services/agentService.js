@@ -140,13 +140,23 @@ User message: ${userMessage}`;
     console.log(`🤖 Starting agentic loop for: ${author.username}`);
 
     let loopCount = 0;
-    const maxLoops = 20; // Prevent infinite loops
+    const startTime = Date.now();
+    const maxTimeMs = 120000; // 2 minutes absolute safety limit
+    const maxLoops = 50; // Soft limit, only for extreme edge cases
 
     try {
         // AGENTIC LOOP - The core of the AI agent
+        // Continues until Claude signals completion (end_turn) or safety limits hit
         while (loopCount < maxLoops) {
             loopCount++;
-            console.log(`🔄 Agent loop iteration ${loopCount}`);
+            const elapsedTime = Date.now() - startTime;
+            console.log(`🔄 Agent loop iteration ${loopCount} (${(elapsedTime/1000).toFixed(1)}s elapsed)`);
+
+            // Check time-based safety limit
+            if (elapsedTime > maxTimeMs) {
+                console.error(`⏱️ Hit time limit (${maxTimeMs/1000}s) after ${loopCount} iterations`);
+                return "I'm taking longer than expected on this! 🍂 Let me try a different approach - could you break this into smaller questions?";
+            }
 
             // Apply rate limiting before calling Claude API
             await anthropicRateLimiter.removeTokens(1);
@@ -282,7 +292,7 @@ User message: ${userMessage}`;
             }
 
             if (response.stop_reason === 'max_tokens') {
-                console.warn(`⚠️  Hit max tokens in loop iteration ${loopCount}`);
+                console.warn(`⚠️  Hit max tokens in loop iteration ${loopCount} after ${((Date.now()-startTime)/1000).toFixed(1)}s`);
                 return "I need to think about this in smaller steps! Let me try again with a simpler approach. 🍂";
             }
 
@@ -291,10 +301,11 @@ User message: ${userMessage}`;
             break;
         }
 
-        // If we exit the loop without returning, we hit max loops
+        // If we exit the loop without returning, we hit max loops (should be rare with 50 limit)
         if (loopCount >= maxLoops) {
-            console.error(`❌ Hit max loop limit (${maxLoops})`);
-            return "I got a bit carried away thinking about this! 😅 Let me know if you'd like me to try again with a simpler approach.";
+            const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+            console.error(`❌ Hit max loop limit (${maxLoops} iterations in ${totalTime}s)`);
+            return "I got a bit carried away thinking about this! 😅 This is more complex than I expected - let me know if you'd like me to try again with a simpler approach.";
         }
 
         // Fallback
