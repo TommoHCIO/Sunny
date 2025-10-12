@@ -175,6 +175,42 @@ function getChannelTools(guild) {
                 required: ["channelName", "nsfw"]
             }
         },
+        {
+            name: "set_channel_position",
+            description: "Set a channel's position in the channel list. Requires owner permissions.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    channelName: {
+                        type: "string",
+                        description: "Name of the channel to reposition"
+                    },
+                    position: {
+                        type: "number",
+                        description: "New position (0 = top)"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Reason for repositioning (default: 'Channel position set by Sunny')"
+                    }
+                },
+                required: ["channelName", "position"]
+            }
+        },
+        {
+            name: "get_channel_permissions",
+            description: "Get all permission overwrites for a channel including roles and members with their allow/deny permissions.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    channelName: {
+                        type: "string",
+                        description: "Name of the channel to inspect"
+                    }
+                },
+                required: ["channelName"]
+            }
+        },
 
         // ===== VOICE/STAGE CHANNEL TOOLS =====
         {

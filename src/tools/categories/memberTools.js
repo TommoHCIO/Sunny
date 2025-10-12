@@ -250,6 +250,52 @@ function getMemberTools(guild) {
                 properties: {},
                 required: []
             }
+        },
+
+        // ===== VOICE MEMBER MANAGEMENT =====
+        {
+            name: "set_member_deaf",
+            description: "Server deafen or undeafen a member in a voice channel. Member must be in voice. Requires Deafen Members permission.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    userId: {
+                        type: "string",
+                        description: "Discord user ID of the member"
+                    },
+                    deaf: {
+                        type: "boolean",
+                        description: "true to deafen, false to undeafen"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Reason for action (default: 'Member deafened by Sunny')"
+                    }
+                },
+                required: ["userId", "deaf"]
+            }
+        },
+        {
+            name: "set_member_mute",
+            description: "Server mute or unmute a member in a voice channel. Member must be in voice. Requires Mute Members permission.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    userId: {
+                        type: "string",
+                        description: "Discord user ID of the member"
+                    },
+                    mute: {
+                        type: "boolean",
+                        description: "true to mute, false to unmute"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Reason for action (default: 'Member muted by Sunny')"
+                    }
+                },
+                required: ["userId", "mute"]
+            }
         }
     ];
 }

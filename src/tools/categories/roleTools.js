@@ -200,6 +200,56 @@ function getRoleTools(guild) {
             }
         },
         {
+            name: "add_role_permission",
+            description: "Add specific permission(s) to a role without removing existing ones. Cannot modify managed roles or roles higher than Sunny's highest role. Requires Manage Roles permission.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    roleId: {
+                        type: "string",
+                        description: "Role ID to update"
+                    },
+                    permissions: {
+                        type: "array",
+                        items: {
+                            type: "string"
+                        },
+                        description: "Array of permission names to ADD (e.g., ['ManageMessages', 'MuteMembers'])"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Reason for adding permissions (default: 'Permissions added by Sunny')"
+                    }
+                },
+                required: ["roleId", "permissions"]
+            }
+        },
+        {
+            name: "remove_role_permission",
+            description: "Remove specific permission(s) from a role while keeping other permissions. Cannot modify managed roles or roles higher than Sunny's highest role. Requires Manage Roles permission.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    roleId: {
+                        type: "string",
+                        description: "Role ID to update"
+                    },
+                    permissions: {
+                        type: "array",
+                        items: {
+                            type: "string"
+                        },
+                        description: "Array of permission names to REMOVE (e.g., ['ManageMessages', 'MuteMembers'])"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Reason for removing permissions (default: 'Permissions removed by Sunny')"
+                    }
+                },
+                required: ["roleId", "permissions"]
+            }
+        },
+        {
             name: "reorder_roles",
             description: "Change a role's position in the role hierarchy. Cannot move roles higher than Sunny's highest role. Requires Manage Roles permission.",
             input_schema: {
@@ -219,6 +269,72 @@ function getRoleTools(guild) {
                     }
                 },
                 required: ["roleId", "newPosition"]
+            }
+        },
+        {
+            name: "set_role_position",
+            description: "Alias for reorder_roles. Change a role's position in the role hierarchy. Cannot move roles higher than Sunny's highest role. Requires Manage Roles permission.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    roleId: {
+                        type: "string",
+                        description: "Role ID to reorder"
+                    },
+                    position: {
+                        type: "number",
+                        description: "New position in the hierarchy (0 = bottom)"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Reason for reordering (default: 'Role reordered by Sunny')"
+                    }
+                },
+                required: ["roleId", "position"]
+            }
+        },
+        {
+            name: "hoist_role",
+            description: "Display role members separately in the member list (hoisted). Requires owner permissions.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    roleId: {
+                        type: "string",
+                        description: "Role ID to hoist"
+                    },
+                    hoisted: {
+                        type: "boolean",
+                        description: "true to hoist (display separately), false to unhoist"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Reason for change (default: 'Role hoist changed by Sunny')"
+                    }
+                },
+                required: ["roleId", "hoisted"]
+            }
+        },
+        {
+            name: "mentionable_role",
+            description: "Make a role mentionable or non-mentionable by everyone. Requires owner permissions.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    roleId: {
+                        type: "string",
+                        description: "Role ID to modify"
+                    },
+                    mentionable: {
+                        type: "boolean",
+                        description: "true to make mentionable, false to make non-mentionable"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Reason for change (default: 'Role mentionability changed by Sunny')"
+                    }
+                },
+                required: ["roleId", "mentionable"]
             }
         }
     ];

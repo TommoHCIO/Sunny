@@ -14,6 +14,7 @@ const serverInspection = require('./serverInspection');
 const memberManagement = require('./memberManagement');
 const advancedModeration = require('./advancedModeration');
 const roleManagement = require('./roleManagement');
+const channelMemberTools = require('./channelMemberTools');
 
 // Initialize action handler (singleton pattern)
 let actionHandler = null;
@@ -42,20 +43,22 @@ async function execute(toolName, input, guild, author) {
     const ownerOnlyTools = [
         'delete_channel', 'create_channel', 'rename_channel', 'create_category',
         'delete_category', 'move_channel', 'set_channel_topic', 'set_slowmode',
-        'set_channel_nsfw', 'create_role', 'delete_role', 'rename_role',
+        'set_channel_nsfw', 'set_channel_position', 'create_role', 'delete_role', 'rename_role',
         'set_role_color', 'kick_member', 'ban_member', 'unban_member',
         'remove_timeout', 'set_nickname', 'archive_thread', 'lock_thread',
         'delete_event', 'create_emoji', 'delete_emoji', 'edit_emoji',
         // New owner-only tools
         'pin_message', 'unpin_message', 'purge_messages', 'remove_all_reactions',
         'set_server_name', 'set_server_icon', 'set_server_banner', 'set_verification_level',
-        'delete_invite', 'create_webhook', 'delete_webhook',
+        'delete_invite', 'create_webhook', 'delete_webhook', 'edit_webhook', 'execute_webhook',
         'delete_thread', 'pin_thread', 'create_sticker', 'edit_sticker', 'delete_sticker',
         'edit_event', 'start_event', 'end_event',
         'create_stage_channel', 'set_bitrate', 'set_user_limit', 'set_rtc_region', 'create_stage_instance',
         'set_channel_permissions', 'remove_channel_permission', 'sync_channel_permissions',
         'create_forum_channel', 'set_default_thread_slowmode', 'set_available_tags',
-        'set_role_permissions', 'create_automod_rule', 'delete_automod_rule',
+        'set_role_permissions', 'add_role_permission', 'remove_role_permission', 'hoist_role', 'mentionable_role',
+        'set_role_position', 'create_automod_rule', 'delete_automod_rule', 'edit_automod_rule',
+        'set_member_deaf', 'set_member_mute',
         'get_audit_logs', 'get_bans'
     ];
 
@@ -397,18 +400,69 @@ async function execute(toolName, input, guild, author) {
             case 'unban_member':
                 return await advancedModeration.unbanMember(guild, input);
 
-            // ===== ROLE MANAGEMENT TOOLS (#109-112) =====
+            // ===== ROLE MANAGEMENT TOOLS (#109-112+) =====
             case 'get_role_info':
-                return await roleManagement.getRoleInfo(guild, input);
+                return await roleManagement.getRoleInfo(guild, input.roleId);
 
             case 'get_role_members':
-                return await roleManagement.getRoleMembers(guild, input);
+                return await roleManagement.getRoleMembers(guild, input.roleId);
 
             case 'update_role_permissions':
-                return await roleManagement.updateRolePermissions(guild, input);
+                return await roleManagement.updateRolePermissions(guild, input.roleId, input.permissions, input.reason);
 
             case 'reorder_roles':
-                return await roleManagement.reorderRoles(guild, input);
+                return await roleManagement.reorderRoles(guild, input.roleId, input.newPosition, input.reason);
+
+            case 'add_role_permission':
+                return await roleManagement.addRolePermission(guild, input.roleId, input.permissions, input.reason);
+
+            case 'remove_role_permission':
+                return await roleManagement.removeRolePermission(guild, input.roleId, input.permissions, input.reason);
+
+            case 'hoist_role':
+                return await roleManagement.hoistRole(guild, input.roleId, input.hoisted, input.reason);
+
+            case 'mentionable_role':
+                return await roleManagement.mentionableRole(guild, input.roleId, input.mentionable, input.reason);
+
+            case 'set_role_position':
+                return await roleManagement.setRolePosition(guild, input.roleId, input.position, input.reason);
+
+            // ===== CHANNEL & MEMBER EXTENDED TOOLS =====
+            case 'set_channel_position':
+                return await channelMemberTools.setChannelPosition(guild, input.channelName, input.position, input.reason);
+
+            case 'get_channel_permissions':
+                return await channelMemberTools.getChannelPermissions(guild, input.channelName);
+
+            case 'set_member_deaf':
+                return await channelMemberTools.setMemberDeaf(guild, input.userId, input.deaf, input.reason);
+
+            case 'set_member_mute':
+                return await channelMemberTools.setMemberMute(guild, input.userId, input.mute, input.reason);
+
+            case 'execute_webhook':
+                return await channelMemberTools.executeWebhook(guild, input.webhookId, input.content, {
+                    username: input.username,
+                    avatarURL: input.avatarURL
+                });
+
+            case 'edit_webhook':
+                return await channelMemberTools.editWebhook(guild, input.webhookId, {
+                    name: input.name,
+                    avatar: input.avatar,
+                    channelId: input.channelId
+                }, input.reason);
+
+            case 'edit_automod_rule':
+                return await channelMemberTools.editAutoModRule(guild, input.ruleName, {
+                    newName: input.newName,
+                    enabled: input.enabled,
+                    keywords: input.keywords,
+                    mentionLimit: input.mentionLimit,
+                    action: input.action,
+                    alertChannelName: input.alertChannelName
+                });
 
             default:
                 console.error(`❌ Unknown tool: ${toolName}`);
@@ -1409,6 +1463,7 @@ async function createAutoModRule(guild, input) {
 
         const rule = await guild.autoModerationRules.create({
             name: input.ruleName,
+            eventType: 1, // MESSAGE_SEND - Required parameter for AutoMod rules
             triggerType: triggerType,
             triggerMetadata: triggerMetadata,
             actions: actions,

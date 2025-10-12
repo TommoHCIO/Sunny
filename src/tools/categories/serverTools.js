@@ -234,6 +234,104 @@ function getServerTools(guild) {
                 required: ["ruleName"]
             }
         },
+        {
+            name: "edit_automod_rule",
+            description: "Edit an existing AutoMod rule (name, keywords, actions, exemptions). Requires owner permissions.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    ruleName: {
+                        type: "string",
+                        description: "Current name of the rule to edit"
+                    },
+                    newName: {
+                        type: "string",
+                        description: "Optional: New name for the rule"
+                    },
+                    enabled: {
+                        type: "boolean",
+                        description: "Optional: Enable or disable the rule"
+                    },
+                    keywords: {
+                        type: "array",
+                        items: { type: "string" },
+                        description: "Optional: Update keyword filter list"
+                    },
+                    mentionLimit: {
+                        type: "number",
+                        description: "Optional: Update mention spam limit"
+                    },
+                    action: {
+                        type: "string",
+                        enum: ["block", "timeout", "alert"],
+                        description: "Optional: Update action type"
+                    },
+                    alertChannelName: {
+                        type: "string",
+                        description: "Required if action is 'alert': Channel for alerts"
+                    }
+                },
+                required: ["ruleName"]
+            }
+        },
+
+        // ===== WEBHOOK TOOLS =====
+        {
+            name: "execute_webhook",
+            description: "Send a message using a webhook. Allows custom username and avatar. Requires owner permissions.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    webhookId: {
+                        type: "string",
+                        description: "Webhook ID to execute"
+                    },
+                    content: {
+                        type: "string",
+                        description: "Message content to send"
+                    },
+                    username: {
+                        type: "string",
+                        description: "Optional: Override webhook username"
+                    },
+                    avatarURL: {
+                        type: "string",
+                        description: "Optional: Override webhook avatar URL"
+                    }
+                },
+                required: ["webhookId", "content"]
+            }
+        },
+        {
+            name: "edit_webhook",
+            description: "Edit webhook properties (name, avatar, channel). Requires owner permissions.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    webhookId: {
+                        type: "string",
+                        description: "Webhook ID to edit"
+                    },
+                    name: {
+                        type: "string",
+                        description: "Optional: New webhook name"
+                    },
+                    avatar: {
+                        type: "string",
+                        description: "Optional: New avatar URL or image data"
+                    },
+                    channelId: {
+                        type: "string",
+                        description: "Optional: Move webhook to different channel"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Reason for edit (default: 'Webhook edited by Sunny')"
+                    }
+                },
+                required: ["webhookId"]
+            }
+        },
 
         // ===== MODERATION LOGS TOOLS =====
         {

@@ -201,6 +201,14 @@ async function reorderRoles(guild, roleId, newPosition, reason = 'Role reordered
         return { success: false, error: 'Guild not provided' };
     }
 
+    // Validate roleId parameter type
+    if (typeof roleId !== 'string') {
+        return {
+            success: false,
+            error: `Invalid roleId parameter: expected string, got ${typeof roleId}. Please provide the role ID as a string.`
+        };
+    }
+
     try {
         const role = guild.roles.cache.get(roleId);
         if (!role) {
@@ -253,9 +261,271 @@ async function reorderRoles(guild, roleId, newPosition, reason = 'Role reordered
     }
 }
 
+/**
+ * Add specific permission(s) to a role (Tool: add_role_permission)
+ */
+async function addRolePermission(guild, roleId, permissions, reason = 'Permissions added by Sunny') {
+    if (!guild) {
+        return { success: false, error: 'Guild not provided' };
+    }
+
+    try {
+        const role = guild.roles.cache.get(roleId);
+        if (!role) {
+            return { success: false, error: `Role with ID ${roleId} not found` };
+        }
+
+        // Check permissions
+        const botMember = guild.members.me;
+        if (!botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
+            return {
+                success: false,
+                error: 'I don\'t have permission to manage roles. Please grant me the "Manage Roles" permission.'
+            };
+        }
+
+        if (role.position >= botMember.roles.highest.position) {
+            return {
+                success: false,
+                error: `I cannot manage this role because it's higher than or equal to my highest role in the hierarchy.`
+            };
+        }
+
+        if (role.managed) {
+            return {
+                success: false,
+                error: 'Cannot modify permissions for managed roles (bot roles, integration roles, etc.)'
+            };
+        }
+
+        // Get current permissions
+        const currentPermissions = role.permissions.toArray();
+
+        // Validate and add new permissions
+        const permissionsToAdd = [];
+        for (const perm of permissions) {
+            if (!PermissionFlagsBits[perm]) {
+                return {
+                    success: false,
+                    error: `Invalid permission: ${perm}`
+                };
+            }
+            if (!currentPermissions.includes(perm)) {
+                permissionsToAdd.push(PermissionFlagsBits[perm]);
+            }
+        }
+
+        // Combine existing and new permissions
+        const newPermissions = [...new Set([...currentPermissions.map(p => PermissionFlagsBits[p]), ...permissionsToAdd])];
+        await role.setPermissions(newPermissions, reason);
+
+        return {
+            success: true,
+            message: `Added permissions to role ${role.name}`,
+            role: {
+                name: role.name,
+                id: role.id
+            },
+            addedPermissions: permissions,
+            currentPermissions: role.permissions.toArray()
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: `Failed to add role permissions: ${error.message}`
+        };
+    }
+}
+
+/**
+ * Remove specific permission(s) from a role (Tool: remove_role_permission)
+ */
+async function removeRolePermission(guild, roleId, permissions, reason = 'Permissions removed by Sunny') {
+    if (!guild) {
+        return { success: false, error: 'Guild not provided' };
+    }
+
+    try {
+        const role = guild.roles.cache.get(roleId);
+        if (!role) {
+            return { success: false, error: `Role with ID ${roleId} not found` };
+        }
+
+        // Check permissions
+        const botMember = guild.members.me;
+        if (!botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
+            return {
+                success: false,
+                error: 'I don\'t have permission to manage roles. Please grant me the "Manage Roles" permission.'
+            };
+        }
+
+        if (role.position >= botMember.roles.highest.position) {
+            return {
+                success: false,
+                error: `I cannot manage this role because it's higher than or equal to my highest role in the hierarchy.`
+            };
+        }
+
+        if (role.managed) {
+            return {
+                success: false,
+                error: 'Cannot modify permissions for managed roles (bot roles, integration roles, etc.)'
+            };
+        }
+
+        // Get current permissions and filter out the ones to remove
+        const currentPermissionBits = role.permissions.toArray().map(p => PermissionFlagsBits[p]);
+        const permissionsToRemoveBits = permissions.map(p => PermissionFlagsBits[p]).filter(Boolean);
+
+        const newPermissions = currentPermissionBits.filter(bit => !permissionsToRemoveBits.includes(bit));
+        await role.setPermissions(newPermissions, reason);
+
+        return {
+            success: true,
+            message: `Removed permissions from role ${role.name}`,
+            role: {
+                name: role.name,
+                id: role.id
+            },
+            removedPermissions: permissions,
+            currentPermissions: role.permissions.toArray()
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: `Failed to remove role permissions: ${error.message}`
+        };
+    }
+}
+
+/**
+ * Set role hoist status (Tool: hoist_role)
+ */
+async function hoistRole(guild, roleId, hoisted, reason = 'Role hoist changed by Sunny') {
+    if (!guild) {
+        return { success: false, error: 'Guild not provided' };
+    }
+
+    try {
+        const role = guild.roles.cache.get(roleId);
+        if (!role) {
+            return { success: false, error: `Role with ID ${roleId} not found` };
+        }
+
+        // Check permissions
+        const botMember = guild.members.me;
+        if (!botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
+            return {
+                success: false,
+                error: 'I don\'t have permission to manage roles. Please grant me the "Manage Roles" permission.'
+            };
+        }
+
+        if (role.position >= botMember.roles.highest.position) {
+            return {
+                success: false,
+                error: `I cannot manage this role because it's higher than or equal to my highest role in the hierarchy.`
+            };
+        }
+
+        if (role.managed) {
+            return {
+                success: false,
+                error: 'Cannot modify managed roles (bot roles, integration roles, etc.)'
+            };
+        }
+
+        await role.edit({ hoist: hoisted }, reason);
+
+        return {
+            success: true,
+            message: `Role ${role.name} is now ${hoisted ? 'hoisted (displayed separately)' : 'not hoisted'}`,
+            role: {
+                name: role.name,
+                id: role.id,
+                hoisted: hoisted
+            }
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: `Failed to change role hoist status: ${error.message}`
+        };
+    }
+}
+
+/**
+ * Set role mentionable status (Tool: mentionable_role)
+ */
+async function mentionableRole(guild, roleId, mentionable, reason = 'Role mentionability changed by Sunny') {
+    if (!guild) {
+        return { success: false, error: 'Guild not provided' };
+    }
+
+    try {
+        const role = guild.roles.cache.get(roleId);
+        if (!role) {
+            return { success: false, error: `Role with ID ${roleId} not found` };
+        }
+
+        // Check permissions
+        const botMember = guild.members.me;
+        if (!botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
+            return {
+                success: false,
+                error: 'I don\'t have permission to manage roles. Please grant me the "Manage Roles" permission.'
+            };
+        }
+
+        if (role.position >= botMember.roles.highest.position) {
+            return {
+                success: false,
+                error: `I cannot manage this role because it's higher than or equal to my highest role in the hierarchy.`
+            };
+        }
+
+        if (role.managed) {
+            return {
+                success: false,
+                error: 'Cannot modify managed roles (bot roles, integration roles, etc.)'
+            };
+        }
+
+        await role.edit({ mentionable: mentionable }, reason);
+
+        return {
+            success: true,
+            message: `Role ${role.name} is now ${mentionable ? 'mentionable by everyone' : 'not mentionable'}`,
+            role: {
+                name: role.name,
+                id: role.id,
+                mentionable: mentionable
+            }
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: `Failed to change role mentionability: ${error.message}`
+        };
+    }
+}
+
+/**
+ * Alias for reorderRoles (Tool: set_role_position)
+ */
+async function setRolePosition(guild, roleId, position, reason = 'Role position set by Sunny') {
+    return await reorderRoles(guild, roleId, position, reason);
+}
+
 module.exports = {
     getRoleInfo,
     getRoleMembers,
     updateRolePermissions,
-    reorderRoles
+    reorderRoles,
+    addRolePermission,
+    removeRolePermission,
+    hoistRole,
+    mentionableRole,
+    setRolePosition
 };
