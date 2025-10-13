@@ -15,6 +15,9 @@ const memberManagement = require('./memberManagement');
 const advancedModeration = require('./advancedModeration');
 const roleManagement = require('./roleManagement');
 const channelMemberTools = require('./channelMemberTools');
+const autoMessageService = require('../services/autoMessageService');
+const ticketService = require('../services/ticketService');
+const ServerSettings = require('../models/ServerSettings');
 
 // Initialize action handler (singleton pattern)
 let actionHandler = null;
@@ -59,7 +62,11 @@ async function execute(toolName, input, guild, author) {
         'set_role_permissions', 'add_role_permission', 'remove_role_permission', 'hoist_role', 'mentionable_role',
         'set_role_position', 'create_automod_rule', 'delete_automod_rule', 'edit_automod_rule',
         'set_member_deaf', 'set_member_mute',
-        'get_audit_logs', 'get_bans'
+        'get_audit_logs', 'get_bans',
+        // Auto message and ticketing tools
+        'create_auto_message', 'update_auto_message', 'delete_auto_message', 'enable_auto_messages', 'disable_auto_messages',
+        'create_ticket', 'close_ticket', 'assign_ticket', 'update_ticket_priority', 'add_ticket_tag',
+        'enable_ticketing', 'disable_ticketing', 'configure_ticket_categories'
     ];
 
     // Permission check for owner-only tools
@@ -463,6 +470,62 @@ async function execute(toolName, input, guild, author) {
                     action: input.action,
                     alertChannelName: input.alertChannelName
                 });
+
+            // ===== AUTOMATIC MESSAGE TOOLS =====
+            case 'create_auto_message':
+                return await createAutoMessage(guild, input);
+
+            case 'list_auto_messages':
+                return await listAutoMessages(guild, input);
+
+            case 'update_auto_message':
+                return await updateAutoMessage(guild, input);
+
+            case 'delete_auto_message':
+                return await deleteAutoMessage(guild, input);
+
+            case 'get_auto_message':
+                return await getAutoMessage(guild, input);
+
+            case 'enable_auto_messages':
+                return await enableAutoMessages(guild, input);
+
+            case 'disable_auto_messages':
+                return await disableAutoMessages(guild, input);
+
+            // ===== TICKETING SYSTEM TOOLS =====
+            case 'create_ticket':
+                return await createTicket(guild, input);
+
+            case 'close_ticket':
+                return await closeTicket(guild, input);
+
+            case 'assign_ticket':
+                return await assignTicket(guild, input);
+
+            case 'update_ticket_priority':
+                return await updateTicketPriority(guild, input);
+
+            case 'list_tickets':
+                return await listTickets(guild, input);
+
+            case 'get_ticket_stats':
+                return await getTicketStats(guild, input);
+
+            case 'get_ticket':
+                return await getTicket(guild, input);
+
+            case 'add_ticket_tag':
+                return await addTicketTag(guild, input);
+
+            case 'enable_ticketing':
+                return await enableTicketing(guild, input);
+
+            case 'disable_ticketing':
+                return await disableTicketing(guild, input);
+
+            case 'configure_ticket_categories':
+                return await configureTicketCategories(guild, input);
 
             default:
                 console.error(`❌ Unknown tool: ${toolName}`);
@@ -1566,6 +1629,505 @@ async function getBans(guild, input) {
         };
     } catch (error) {
         return { success: false, error: `Failed to get bans: ${error.message}` };
+    }
+}
+
+// ===== AUTOMATIC MESSAGE IMPLEMENTATIONS =====
+
+async function createAutoMessage(guild, input) {
+    try {
+        // Find channel by name
+        const channel = findChannel(guild, input.channelName);
+        if (!channel) {
+            return { success: false, error: `Channel "${input.channelName}" not found` };
+        }
+
+        const config = {
+            messageType: input.messageType,
+            channelId: channel.id,
+            content: input.content,
+            embedConfig: input.embedConfig,
+            triggers: input.triggers,
+            dmUser: input.dmUser,
+            enabled: input.enabled !== false
+        };
+
+        const autoMessage = await autoMessageService.createAutoMessage(guild.id, config);
+
+        return {
+            success: true,
+            message: `Created ${input.messageType} automatic message for #${channel.name}`,
+            message_id: autoMessage._id.toString()
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to create automatic message: ${error.message}` };
+    }
+}
+
+async function listAutoMessages(guild, input) {
+    try {
+        const filters = {};
+        if (input.messageType) filters.messageType = input.messageType;
+        if (input.enabled !== undefined) filters.enabled = input.enabled;
+
+        const messages = await autoMessageService.listAutoMessages(guild.id, filters);
+
+        const messageList = messages.map(m => ({
+            id: m._id.toString(),
+            type: m.messageType,
+            channel: guild.channels.cache.get(m.channelId)?.name || 'Unknown',
+            enabled: m.enabled,
+            content: m.content?.substring(0, 50) + (m.content?.length > 50 ? '...' : ''),
+            has_embed: m.embedConfig?.enabled || false
+        }));
+
+        return {
+            success: true,
+            messages: messageList,
+            total: messageList.length
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to list automatic messages: ${error.message}` };
+    }
+}
+
+async function updateAutoMessage(guild, input) {
+    try {
+        const updates = input.updates;
+
+        // If channel name is provided, convert to channel ID
+        if (updates.channelName) {
+            const channel = findChannel(guild, updates.channelName);
+            if (!channel) {
+                return { success: false, error: `Channel "${updates.channelName}" not found` };
+            }
+            updates.channelId = channel.id;
+            delete updates.channelName;
+        }
+
+        await autoMessageService.updateAutoMessage(input.messageId, updates);
+
+        return {
+            success: true,
+            message: `Updated automatic message ${input.messageId}`
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to update automatic message: ${error.message}` };
+    }
+}
+
+async function deleteAutoMessage(guild, input) {
+    try {
+        await autoMessageService.deleteAutoMessage(input.messageId);
+
+        return {
+            success: true,
+            message: `Deleted automatic message ${input.messageId}`
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to delete automatic message: ${error.message}` };
+    }
+}
+
+async function getAutoMessage(guild, input) {
+    try {
+        const message = await autoMessageService.getAutoMessage(input.messageId);
+
+        if (!message) {
+            return { success: false, error: `Automatic message ${input.messageId} not found` };
+        }
+
+        return {
+            success: true,
+            message: {
+                id: message._id.toString(),
+                type: message.messageType,
+                channel: guild.channels.cache.get(message.channelId)?.name || 'Unknown',
+                content: message.content,
+                embed_config: message.embedConfig,
+                triggers: message.triggers,
+                enabled: message.enabled,
+                dm_user: message.dmUser
+            }
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to get automatic message: ${error.message}` };
+    }
+}
+
+async function enableAutoMessages(guild, input) {
+    try {
+        const settings = await ServerSettings.findOne({ guildId: guild.id }) || new ServerSettings({ guildId: guild.id });
+
+        const featureMap = {
+            'welcome': 'welcomeEnabled',
+            'goodbye': 'goodbyeEnabled',
+            'milestones': 'milestonesEnabled',
+            'triggers': 'triggersEnabled'
+        };
+
+        const field = featureMap[input.featureType];
+        if (!field) {
+            return { success: false, error: `Invalid feature type: ${input.featureType}` };
+        }
+
+        if (!settings.autoMessages) settings.autoMessages = {};
+        settings.autoMessages[field] = true;
+        await settings.save();
+
+        return {
+            success: true,
+            message: `Enabled ${input.featureType} automatic messages`
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to enable automatic messages: ${error.message}` };
+    }
+}
+
+async function disableAutoMessages(guild, input) {
+    try {
+        const settings = await ServerSettings.findOne({ guildId: guild.id });
+        if (!settings) {
+            return { success: false, error: 'Server settings not found' };
+        }
+
+        const featureMap = {
+            'welcome': 'welcomeEnabled',
+            'goodbye': 'goodbyeEnabled',
+            'milestones': 'milestonesEnabled',
+            'triggers': 'triggersEnabled'
+        };
+
+        const field = featureMap[input.featureType];
+        if (!field) {
+            return { success: false, error: `Invalid feature type: ${input.featureType}` };
+        }
+
+        if (!settings.autoMessages) settings.autoMessages = {};
+        settings.autoMessages[field] = false;
+        await settings.save();
+
+        return {
+            success: true,
+            message: `Disabled ${input.featureType} automatic messages`
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to disable automatic messages: ${error.message}` };
+    }
+}
+
+// ===== TICKETING SYSTEM IMPLEMENTATIONS =====
+
+async function createTicket(guild, input) {
+    try {
+        // Find member by name
+        const member = guild.members.cache.find(m => 
+            m.user.username.toLowerCase() === input.memberName.toLowerCase() ||
+            m.displayName.toLowerCase() === input.memberName.toLowerCase()
+        );
+
+        if (!member) {
+            return { success: false, error: `Member "${input.memberName}" not found` };
+        }
+
+        const result = await ticketService.createTicket(
+            guild,
+            member,
+            input.category,
+            input.subject,
+            input.description
+        );
+
+        return {
+            success: true,
+            message: `Created ticket #${result.ticket.ticketNumber} for ${member.user.username}`,
+            ticket_id: result.ticket.ticketId,
+            thread_id: result.thread.id
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to create ticket: ${error.message}` };
+    }
+}
+
+async function closeTicket(guild, input) {
+    try {
+        // Find staff member by name
+        const staffMember = guild.members.cache.find(m => 
+            m.user.username.toLowerCase() === input.staffMemberName.toLowerCase() ||
+            m.displayName.toLowerCase() === input.staffMemberName.toLowerCase()
+        );
+
+        if (!staffMember) {
+            return { success: false, error: `Staff member "${input.staffMemberName}" not found` };
+        }
+
+        const ticket = await ticketService.closeTicket(
+            input.ticketId,
+            staffMember,
+            input.reason
+        );
+
+        return {
+            success: true,
+            message: `Closed ticket #${ticket.ticketNumber}`,
+            transcript_url: ticket.transcriptUrl
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to close ticket: ${error.message}` };
+    }
+}
+
+async function assignTicket(guild, input) {
+    try {
+        // Find staff member by name
+        const staffMember = guild.members.cache.find(m => 
+            m.user.username.toLowerCase() === input.staffMemberName.toLowerCase() ||
+            m.displayName.toLowerCase() === input.staffMemberName.toLowerCase()
+        );
+
+        if (!staffMember) {
+            return { success: false, error: `Staff member "${input.staffMemberName}" not found` };
+        }
+
+        const ticket = await ticketService.assignTicket(input.ticketId, staffMember);
+
+        return {
+            success: true,
+            message: `Assigned ticket #${ticket.ticketNumber} to ${staffMember.user.username}`
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to assign ticket: ${error.message}` };
+    }
+}
+
+async function updateTicketPriority(guild, input) {
+    try {
+        const ticket = await ticketService.updateTicketPriority(input.ticketId, input.priority);
+
+        return {
+            success: true,
+            message: `Updated ticket #${ticket.ticketNumber} priority to ${input.priority}`
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to update ticket priority: ${error.message}` };
+    }
+}
+
+async function listTickets(guild, input) {
+    try {
+        const filters = {};
+        if (input.status) filters.status = input.status;
+        if (input.category) filters.category = input.category;
+
+        // Convert member names to IDs if provided
+        if (input.assignedToName) {
+            const member = guild.members.cache.find(m => 
+                m.user.username.toLowerCase() === input.assignedToName.toLowerCase() ||
+                m.displayName.toLowerCase() === input.assignedToName.toLowerCase()
+            );
+            if (member) filters.assignedTo = member.id;
+        }
+
+        if (input.creatorName) {
+            const member = guild.members.cache.find(m => 
+                m.user.username.toLowerCase() === input.creatorName.toLowerCase() ||
+                m.displayName.toLowerCase() === input.creatorName.toLowerCase()
+            );
+            if (member) filters.creatorId = member.id;
+        }
+
+        const tickets = await ticketService.listTickets(guild.id, filters);
+
+        const ticketList = tickets.map(t => ({
+            ticket_number: t.ticketNumber,
+            ticket_id: t.ticketId,
+            subject: t.subject,
+            category: t.category,
+            status: t.status,
+            priority: t.priority,
+            creator: guild.members.cache.get(t.creatorId)?.user.username || 'Unknown',
+            assigned_to: t.assignedTo ? (guild.members.cache.get(t.assignedTo)?.user.username || 'Unknown') : 'Unassigned',
+            created_at: t.createdAt.toLocaleDateString()
+        }));
+
+        return {
+            success: true,
+            tickets: ticketList,
+            total: ticketList.length
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to list tickets: ${error.message}` };
+    }
+}
+
+async function getTicketStats(guild, input) {
+    try {
+        const stats = await ticketService.getTicketStats(guild.id);
+
+        return {
+            success: true,
+            stats: {
+                total: stats.total,
+                open: stats.open,
+                in_progress: stats.inProgress,
+                closed: stats.closed,
+                by_category: stats.byCategory,
+                avg_resolution_time: ticketService.formatDuration(stats.avgResolutionTime),
+                avg_first_response_time: ticketService.formatDuration(stats.avgFirstResponseTime)
+            }
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to get ticket stats: ${error.message}` };
+    }
+}
+
+async function getTicket(guild, input) {
+    try {
+        const ticket = await ticketService.getTicket(input.ticketId);
+
+        if (!ticket) {
+            return { success: false, error: `Ticket ${input.ticketId} not found` };
+        }
+
+        return {
+            success: true,
+            ticket: {
+                ticket_number: ticket.ticketNumber,
+                ticket_id: ticket.ticketId,
+                subject: ticket.subject,
+                description: ticket.description,
+                category: ticket.category,
+                status: ticket.status,
+                priority: ticket.priority,
+                creator: guild.members.cache.get(ticket.creatorId)?.user.username || 'Unknown',
+                assigned_to: ticket.assignedTo ? (guild.members.cache.get(ticket.assignedTo)?.user.username || 'Unknown') : 'Unassigned',
+                tags: ticket.tags,
+                created_at: ticket.createdAt.toLocaleString(),
+                closed_at: ticket.closedAt?.toLocaleString() || 'Not closed',
+                transcript_url: ticket.transcriptUrl
+            }
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to get ticket: ${error.message}` };
+    }
+}
+
+async function addTicketTag(guild, input) {
+    try {
+        const ticket = await ticketService.addTicketTag(input.ticketId, input.tag);
+
+        return {
+            success: true,
+            message: `Added tag "${input.tag}" to ticket #${ticket.ticketNumber}`
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to add ticket tag: ${error.message}` };
+    }
+}
+
+async function enableTicketing(guild, input) {
+    try {
+        // Find channels
+        const supportChannel = findChannel(guild, input.supportChannelName);
+        if (!supportChannel) {
+            return { success: false, error: `Support channel "${input.supportChannelName}" not found` };
+        }
+
+        const settings = await ServerSettings.findOne({ guildId: guild.id }) || new ServerSettings({ guildId: guild.id });
+
+        if (!settings.ticketing) settings.ticketing = {};
+        settings.ticketing.enabled = true;
+        settings.ticketing.supportChannelId = supportChannel.id;
+
+        // Optional: staff notify channel
+        if (input.staffNotifyChannelName) {
+            const notifyChannel = findChannel(guild, input.staffNotifyChannelName);
+            if (notifyChannel) {
+                settings.ticketing.staffNotifyChannelId = notifyChannel.id;
+            }
+        }
+
+        // Optional: transcript channel
+        if (input.transcriptChannelName) {
+            const transcriptChannel = findChannel(guild, input.transcriptChannelName);
+            if (transcriptChannel) {
+                settings.ticketing.transcripts = settings.ticketing.transcripts || {};
+                settings.ticketing.transcripts.enabled = true;
+                settings.ticketing.transcripts.channelId = transcriptChannel.id;
+            }
+        }
+
+        // Optional: staff roles
+        if (input.staffRoleNames?.length) {
+            const roleIds = [];
+            for (const roleName of input.staffRoleNames) {
+                const role = guild.roles.cache.find(r => r.name.toLowerCase() === roleName.toLowerCase());
+                if (role) roleIds.push(role.id);
+            }
+            settings.ticketing.staffRoleIds = roleIds;
+        }
+
+        await settings.save();
+
+        return {
+            success: true,
+            message: `Enabled ticketing system with support channel #${supportChannel.name}`
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to enable ticketing: ${error.message}` };
+    }
+}
+
+async function disableTicketing(guild, input) {
+    try {
+        const settings = await ServerSettings.findOne({ guildId: guild.id });
+        if (!settings) {
+            return { success: false, error: 'Server settings not found' };
+        }
+
+        if (!settings.ticketing) settings.ticketing = {};
+        settings.ticketing.enabled = false;
+        await settings.save();
+
+        return {
+            success: true,
+            message: 'Disabled ticketing system'
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to disable ticketing: ${error.message}` };
+    }
+}
+
+async function configureTicketCategories(guild, input) {
+    try {
+        const settings = await ServerSettings.findOne({ guildId: guild.id }) || new ServerSettings({ guildId: guild.id });
+
+        if (!settings.ticketing) settings.ticketing = {};
+
+        // Convert role names to IDs
+        const categories = input.categories.map(cat => {
+            const result = {
+                name: cat.name,
+                emoji: cat.emoji
+            };
+
+            if (cat.autoAssignRoleName) {
+                const role = guild.roles.cache.find(r => r.name.toLowerCase() === cat.autoAssignRoleName.toLowerCase());
+                if (role) result.autoAssignRoleId = role.id;
+            }
+
+            return result;
+        });
+
+        settings.ticketing.categories = categories;
+        await settings.save();
+
+        return {
+            success: true,
+            message: `Configured ${categories.length} ticket categories`
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to configure ticket categories: ${error.message}` };
     }
 }
 
