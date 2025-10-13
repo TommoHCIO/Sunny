@@ -275,13 +275,7 @@ client.on('interactionCreate', async (interaction) => {
                     // Extract form values
                     const subject = interaction.fields.getTextInputValue('ticket_subject').trim();
                     const description = interaction.fields.getTextInputValue('ticket_description').trim();
-                    let priority = interaction.fields.getTextInputValue('ticket_priority')?.toLowerCase().trim() || 'normal';
-                    
-                    // Validate priority
-                    const validPriorities = ['low', 'normal', 'high', 'urgent'];
-                    if (!validPriorities.includes(priority)) {
-                        priority = 'normal'; // Default to normal if invalid
-                    }
+                    const priority = 'normal'; // Default all tickets to normal priority
                     
                     // Create the ticket
                     const ticket = await ticketService.createTicket(
@@ -297,8 +291,7 @@ client.on('interactionCreate', async (interaction) => {
                         `✅ **Ticket Created Successfully!**\n\n` +
                         `🎫 **Ticket #${ticket.ticketNumber}**\n` +
                         `📁 Category: ${category}\n` +
-                        `📌 Subject: ${subject}\n` +
-                        `⚡ Priority: ${priority}\n\n` +
+                        `📌 Subject: ${subject}\n\n` +
                         `Your ticket thread has been created. Please check <#${ticket.threadId}> to continue the conversation with our support team.`
                     );
                 } catch (error) {
@@ -343,21 +336,10 @@ client.on('interactionCreate', async (interaction) => {
                     .setRequired(true)
                     .setMaxLength(1000);
                 
-                // Priority input
-                const priorityInput = new TextInputBuilder()
-                    .setCustomId('ticket_priority')
-                    .setLabel('Priority')
-                    .setStyle(TextInputStyle.Short)
-                    .setPlaceholder('low, normal, high, urgent (default: normal)')
-                    .setRequired(false)
-                    .setValue('normal')
-                    .setMaxLength(10);
-                
                 const subjectRow = new ActionRowBuilder().addComponents(subjectInput);
                 const descriptionRow = new ActionRowBuilder().addComponents(descriptionInput);
-                const priorityRow = new ActionRowBuilder().addComponents(priorityInput);
                 
-                modal.addComponents(subjectRow, descriptionRow, priorityRow);
+                modal.addComponents(subjectRow, descriptionRow);
                 
                 await interaction.showModal(modal);
             }
