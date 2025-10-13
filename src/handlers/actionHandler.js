@@ -2,6 +2,7 @@
 const { ChannelType, PermissionFlagsBits, AttachmentBuilder } = require('discord.js');
 const { isOwner } = require('../utils/permissions');
 const imageService = require('../services/imageService');
+const videoService = require('../services/videoService');
 
 /**
  * Comprehensive action handler for all Discord server management commands
@@ -1219,10 +1220,34 @@ class ActionHandler {
         const { stickerName, stickerFile, description, emoji } = action;
 
         try {
-            // Check if the file is an image URL that needs processing
+            // Check if the file is a video URL that needs conversion to APNG
             let fileToUpload = stickerFile;
 
-            if (imageService.isImageUrl(stickerFile)) {
+            if (videoService.isVideoUrl(stickerFile)) {
+                this.log('🎬', `Converting MP4 to APNG for animated sticker: ${stickerName}`);
+
+                // Get video info first
+                try {
+                    const videoInfo = await videoService.getVideoInfo(stickerFile);
+                    this.log('📊', `Video info - Duration: ${videoInfo.duration}s, Size: ${(videoInfo.sizeBytes / 1024).toFixed(2)}KB, ${videoInfo.width}x${videoInfo.height} @ ${videoInfo.fps}fps`);
+
+                    if (videoInfo.duration > 5) {
+                        this.log('⚠️', `Video is ${videoInfo.duration}s - will be truncated to 5 seconds for Discord sticker`);
+                    }
+                } catch (infoError) {
+                    this.log('⚠️', `Could not get video info: ${infoError.message}`);
+                }
+
+                // Convert MP4 to APNG
+                const apngBuffer = await videoService.convertMP4ToAPNG(stickerFile);
+
+                // Create AttachmentBuilder from APNG buffer
+                fileToUpload = new AttachmentBuilder(apngBuffer, {
+                    name: `${stickerName}.apng`
+                });
+
+                this.log('✅', `Video converted successfully to APNG for sticker: ${stickerName}`);
+            } else if (imageService.isImageUrl(stickerFile)) {
                 this.log('🖼️', `Processing image for sticker: ${stickerName}`);
 
                 // Process image (resize, compress)
