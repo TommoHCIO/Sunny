@@ -52,17 +52,18 @@ class ContextService {
     async getContext(channelId) {
         // Try MongoDB first
         const dbContext = await databaseService.getRecentMessages(channelId, this.maxMessages);
-        
+
         if (dbContext && dbContext.length > 0) {
             return dbContext.map(msg => ({
                 author: msg.authorName,
                 authorId: msg.authorId,
                 content: msg.content,
                 timestamp: msg.timestamp.getTime(),
-                isSunny: msg.isBot
+                isSunny: msg.isBot,
+                attachments: msg.attachments || []
             }));
         }
-        
+
         // Fallback to in-memory cache
         if (!this.channelContexts.has(channelId)) {
             this.channelContexts.set(channelId, []);
@@ -102,21 +103,35 @@ class ContextService {
         
         // Also update in-memory cache for immediate access
         const context = await this.getContext(channelId);
-        
+
+        // Extract attachment information
+        const attachments = [];
+        if (message.attachments && message.attachments.size > 0) {
+            message.attachments.forEach(att => {
+                attachments.push({
+                    name: att.name,
+                    url: att.url,
+                    contentType: att.contentType || 'unknown',
+                    size: att.size
+                });
+            });
+        }
+
         // Add new message
         context.push({
             author: message.author.username,
             authorId: message.author.id,
             content: message.content,
             timestamp: message.createdTimestamp,
-            isSunny: message.author.bot
+            isSunny: message.author.bot,
+            attachments: attachments
         });
-        
+
         // Keep only last N messages
         if (context.length > this.maxMessages) {
             context.shift(); // Remove oldest
         }
-        
+
         this.channelContexts.set(channelId, context);
     }
     
@@ -149,7 +164,16 @@ class ContextService {
 
         // Add conversation history with user IDs for moderation actions
         context.forEach(msg => {
-            prompt += `${msg.author} (ID: ${msg.authorId}): ${msg.content}\n`;
+            prompt += `${msg.author} (ID: ${msg.authorId}): ${msg.content}`;
+
+            // Include attachment info in history
+            if (msg.attachments && msg.attachments.length > 0) {
+                const attachmentInfo = msg.attachments.map(att =>
+                    `${att.name} (${att.contentType})`
+                ).join(', ');
+                prompt += ` [Attached: ${attachmentInfo}]`;
+            }
+            prompt += '\n';
         });
 
         // Add reply context if applicable
@@ -159,8 +183,22 @@ class ContextService {
 
         // Add current message
         prompt += `\nCurrent message from ${currentMessage.author.username}:\n`;
-        prompt += `"${currentMessage.content}"\n\n`;
-        prompt += `Respond to this message with full awareness of the conversation context.`;
+        prompt += `"${currentMessage.content}"`;
+
+        // Add current message attachments with full details
+        if (currentMessage.attachments && currentMessage.attachments.size > 0) {
+            prompt += '\n\nUser has attached the following files:\n';
+            currentMessage.attachments.forEach(att => {
+                prompt += `- File: ${att.name}\n`;
+                prompt += `  Type: ${att.contentType || 'unknown'}\n`;
+                prompt += `  Size: ${(att.size / 1024).toFixed(2)} KB\n`;
+                prompt += `  URL: ${att.url}\n`;
+            });
+            prompt += '\nIMPORTANT: You can use these attachment URLs directly with create_sticker or create_emoji tools.\n';
+            prompt += 'Just pass the URL as the stickerFile or emojiUrl parameter.\n';
+        }
+
+        prompt += `\nRespond to this message with full awareness of the conversation context.`;
         prompt += `\nWhen taking moderation actions, use the correct user ID from the conversation history.`;
 
         return prompt;
