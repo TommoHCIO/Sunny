@@ -1132,10 +1132,34 @@ class ActionHandler {
         const { emojiName, emojiUrl, roles } = action;
 
         try {
-            // Check if the file is an image URL that needs processing
+            // Check if the file is a video or image URL that needs processing
             let fileToUpload = emojiUrl;
 
-            if (imageService.isImageUrl(emojiUrl)) {
+            if (videoService.isVideoUrl(emojiUrl)) {
+                this.log('🎬', `Converting MP4 to APNG for animated emoji: ${emojiName}`);
+
+                // Get video info first
+                try {
+                    const videoInfo = await videoService.getVideoInfo(emojiUrl);
+                    this.log('📊', `Video info - Duration: ${videoInfo.duration}s, Size: ${(videoInfo.sizeBytes / 1024).toFixed(2)}KB, ${videoInfo.width}x${videoInfo.height} @ ${videoInfo.fps}fps`);
+
+                    if (videoInfo.duration > 5) {
+                        this.log('⚠️', `Video is ${videoInfo.duration}s - will be truncated for Discord emoji`);
+                    }
+                } catch (infoError) {
+                    this.log('⚠️', `Could not get video info: ${infoError.message}`);
+                }
+
+                // Convert MP4 to APNG (emojis use same process as stickers but get resized to 256x256 by imageService)
+                const apngBuffer = await videoService.convertMP4ToAPNG(emojiUrl);
+
+                // Create AttachmentBuilder from APNG buffer
+                fileToUpload = new AttachmentBuilder(apngBuffer, {
+                    name: `${emojiName}.apng`
+                });
+
+                this.log('✅', `Video converted successfully to APNG for emoji: ${emojiName}`);
+            } else if (imageService.isImageUrl(emojiUrl)) {
                 this.log('🖼️', `Processing image for emoji: ${emojiName}`);
 
                 // Process image (resize, compress)

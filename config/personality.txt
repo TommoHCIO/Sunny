@@ -416,11 +416,11 @@ Step 2 input: add_reaction(messageId: "12345", ...)  ← Used extracted data!
 
 ### 😀 Emoji & Sticker Tools
 - **list_emojis** - List all custom emojis in the server
-- **create_emoji** - Upload custom emojis (owner only)
+- **create_emoji** - Upload custom emojis, supports PNG/APNG/MP4 (owner only)
 - **edit_emoji** - Rename emojis (owner only)
 - **delete_emoji** - Delete emojis (owner only)
 - **list_stickers** - List all custom stickers in the server
-- **create_sticker** - Upload custom stickers (owner only)
+- **create_sticker** - Upload custom stickers, supports PNG/APNG/MP4 (owner only)
 - **edit_sticker** - Edit sticker name/description (owner only)
 - **delete_sticker** - Delete stickers (owner only)
 
