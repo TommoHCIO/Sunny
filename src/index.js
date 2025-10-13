@@ -265,25 +265,17 @@ client.on('interactionCreate', async (interaction) => {
     try {
         // Handle modal submissions
         if (interaction.isModalSubmit()) {
-            if (interaction.customId === 'ticket_create_modal') {
+            if (interaction.customId.startsWith('ticket_create_modal_')) {
                 await interaction.deferReply({ ephemeral: true });
                 
                 try {
+                    // Extract category from modal customId
+                    const category = interaction.customId.replace('ticket_create_modal_', '');
+                    
                     // Extract form values
-                    const category = interaction.fields.getTextInputValue('ticket_category').toLowerCase().trim();
                     const subject = interaction.fields.getTextInputValue('ticket_subject').trim();
                     const description = interaction.fields.getTextInputValue('ticket_description').trim();
                     let priority = interaction.fields.getTextInputValue('ticket_priority')?.toLowerCase().trim() || 'normal';
-                    
-                    // Validate category
-                    const validCategories = ['support', 'bug', 'feature', 'question'];
-                    if (!validCategories.includes(category)) {
-                        await interaction.editReply(
-                            `❌ **Invalid Category**\n\n` +
-                            `Please use one of: ${validCategories.join(', ')}`
-                        );
-                        return;
-                    }
                     
                     // Validate priority
                     const validPriorities = ['low', 'normal', 'high', 'urgent'];
@@ -321,30 +313,17 @@ client.on('interactionCreate', async (interaction) => {
             return;
         }
         
-        if (!interaction.isButton()) return;
-        
-        const customId = interaction.customId;
-        
-        // Handle ticket panel buttons (create new ticket)
-        if (customId.startsWith('ticket_panel_')) {
-            const action = customId.replace('ticket_panel_', '');
-            
-            if (action === 'create') {
-                // Show modal form for ticket creation
+        // Handle string select menu interactions (dropdown selections)
+        if (interaction.isStringSelectMenu()) {
+            if (interaction.customId === 'ticket_category_select') {
+                const category = interaction.values[0];
+                
+                // Show modal with pre-selected category
                 const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
                 
                 const modal = new ModalBuilder()
-                    .setCustomId('ticket_create_modal')
-                    .setTitle('Create a Support Ticket');
-                
-                // Category selection (short text input)
-                const categoryInput = new TextInputBuilder()
-                    .setCustomId('ticket_category')
-                    .setLabel('Category')
-                    .setStyle(TextInputStyle.Short)
-                    .setPlaceholder('support, bug, feature, question')
-                    .setRequired(true)
-                    .setMaxLength(50);
+                    .setCustomId(`ticket_create_modal_${category}`)
+                    .setTitle(`Create ${category.charAt(0).toUpperCase() + category.slice(1)} Ticket`);
                 
                 // Subject input
                 const subjectInput = new TextInputBuilder()
@@ -374,15 +353,66 @@ client.on('interactionCreate', async (interaction) => {
                     .setValue('normal')
                     .setMaxLength(10);
                 
-                // Add inputs to action rows (one per row)
-                const categoryRow = new ActionRowBuilder().addComponents(categoryInput);
                 const subjectRow = new ActionRowBuilder().addComponents(subjectInput);
                 const descriptionRow = new ActionRowBuilder().addComponents(descriptionInput);
                 const priorityRow = new ActionRowBuilder().addComponents(priorityInput);
                 
-                modal.addComponents(categoryRow, subjectRow, descriptionRow, priorityRow);
+                modal.addComponents(subjectRow, descriptionRow, priorityRow);
                 
                 await interaction.showModal(modal);
+            }
+            return;
+        }
+        
+        if (!interaction.isButton()) return;
+        
+        const customId = interaction.customId;
+        
+        // Handle ticket panel buttons (create new ticket)
+        if (customId.startsWith('ticket_panel_')) {
+            const action = customId.replace('ticket_panel_', '');
+            
+            if (action === 'create') {
+                // Show dropdown menu for category selection
+                const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js');
+                
+                const selectMenu = new StringSelectMenuBuilder()
+                    .setCustomId('ticket_category_select')
+                    .setPlaceholder('Select a ticket category')
+                    .addOptions([
+                        {
+                            label: 'Support',
+                            description: 'Get help with server features or general questions',
+                            value: 'support',
+                            emoji: '🎫'
+                        },
+                        {
+                            label: 'Bug Report',
+                            description: 'Report a bug or technical issue',
+                            value: 'bug',
+                            emoji: '🐞'
+                        },
+                        {
+                            label: 'Feature Request',
+                            description: 'Suggest a new feature or improvement',
+                            value: 'feature',
+                            emoji: '✨'
+                        },
+                        {
+                            label: 'Question',
+                            description: 'Ask a quick question',
+                            value: 'question',
+                            emoji: '❓'
+                        }
+                    ]);
+                
+                const row = new ActionRowBuilder().addComponents(selectMenu);
+                
+                await interaction.reply({
+                    content: '🎫 **Create a Support Ticket**\n\nPlease select a category for your ticket:',
+                    components: [row],
+                    ephemeral: true
+                });
             } else if (action === 'view') {
                 await interaction.deferReply({ ephemeral: true });
                 // View user's tickets
