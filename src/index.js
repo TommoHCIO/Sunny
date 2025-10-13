@@ -279,7 +279,7 @@ client.on('interactionCreate', async (interaction) => {
                     
                     // Create the ticket
                     const ticket = await ticketService.createTicket(
-                        interaction.guild.id,
+                        interaction.guild,
                         interaction.member,
                         category,
                         subject,
