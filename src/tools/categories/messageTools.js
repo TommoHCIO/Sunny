@@ -286,6 +286,82 @@ function getMessageTools(guild) {
                 properties: {},
                 required: []
             }
+        },
+        {
+            name: "send_button_message",
+            description: "Send a message with interactive buttons. Useful for creating ticket panels, polls, or any interactive UI. Buttons can have custom IDs and labels. Supports up to 5 buttons per row and 5 rows max.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    channelName: {
+                        type: "string",
+                        description: "Channel name or ID where to send the message"
+                    },
+                    content: {
+                        type: "string",
+                        description: "Message content (optional if embed is provided)"
+                    },
+                    embed: {
+                        type: "object",
+                        description: "Optional embed configuration",
+                        properties: {
+                            title: { type: "string" },
+                            description: { type: "string" },
+                            color: { type: "string", description: "Hex color (e.g., #FF6B35)" },
+                            footer: { type: "string" },
+                            thumbnail: { type: "string" },
+                            image: { type: "string" },
+                            fields: {
+                                type: "array",
+                                items: {
+                                    type: "object",
+                                    properties: {
+                                        name: { type: "string" },
+                                        value: { type: "string" },
+                                        inline: { type: "boolean" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    buttons: {
+                        type: "array",
+                        description: "Array of button rows (max 5 rows)",
+                        items: {
+                            type: "object",
+                            properties: {
+                                customId: {
+                                    type: "string",
+                                    description: "Unique ID for the button (used to identify which button was clicked)"
+                                },
+                                label: {
+                                    type: "string",
+                                    description: "Text displayed on the button"
+                                },
+                                style: {
+                                    type: "string",
+                                    enum: ["primary", "secondary", "success", "danger", "link"],
+                                    description: "Button color: primary (blue), secondary (gray), success (green), danger (red), link (gray with URL)"
+                                },
+                                emoji: {
+                                    type: "string",
+                                    description: "Optional emoji to display on button (e.g., '🎫', '✅')"
+                                },
+                                url: {
+                                    type: "string",
+                                    description: "For link style buttons: URL to open when clicked"
+                                },
+                                disabled: {
+                                    type: "boolean",
+                                    description: "Whether button is disabled (default: false)"
+                                }
+                            },
+                            required: ["customId", "label", "style"]
+                        }
+                    }
+                },
+                required: ["channelName", "buttons"]
+            }
         }
     ];
 }

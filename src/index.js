@@ -260,14 +260,54 @@ client.on('messageReactionRemove', async (reaction, user) => {
     }
 });
 
-// Button interaction events (for ticket management)
+// Button interaction events (for ticket management and ticket panel)
 client.on('interactionCreate', async (interaction) => {
     try {
         if (!interaction.isButton()) return;
         
         const customId = interaction.customId;
         
-        // Handle ticket buttons
+        // Handle ticket panel buttons (create new ticket)
+        if (customId.startsWith('ticket_panel_')) {
+            await interaction.deferReply({ ephemeral: true });
+            
+            const action = customId.replace('ticket_panel_', '');
+            
+            if (action === 'create') {
+                // For now, send instructions to use text command
+                // TODO: Implement modal form for ticket creation
+                await interaction.editReply(
+                    '🎫 **Create a Ticket**\n\n' +
+                    'To create a ticket, please send a message in this channel like:\n' +
+                    '`sunny create a support ticket about [your issue]`\n\n' +
+                    '**Example:**\n' +
+                    '`sunny create a support ticket about role permissions not working`'
+                );
+            } else if (action === 'view') {
+                // View user's tickets
+                try {
+                    const tickets = await ticketService.listTickets(interaction.guild.id, {
+                        creatorId: interaction.user.id,
+                        status: { $in: ['open', 'in-progress'] }
+                    });
+                    
+                    if (tickets.length === 0) {
+                        await interaction.editReply('📭 You have no open tickets.');
+                    } else {
+                        const ticketList = tickets.map(t => 
+                            `**Ticket #${t.ticketNumber}** - ${t.subject}\n` +
+                            `Status: ${t.status} | Category: ${t.category}`
+                        ).join('\n\n');
+                        
+                        await interaction.editReply(`🎫 **Your Open Tickets:**\n\n${ticketList}`);
+                    }
+                } catch (error) {
+                    await interaction.editReply(`❌ Failed to view tickets: ${error.message}`);
+                }
+            }
+        }
+        
+        // Handle ticket management buttons (on existing tickets)
         if (customId.startsWith('ticket_')) {
             await interaction.deferReply({ ephemeral: true });
             

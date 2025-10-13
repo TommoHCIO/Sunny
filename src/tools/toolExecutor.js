@@ -242,6 +242,9 @@ async function execute(toolName, input, guild, author) {
             case 'list_reaction_roles':
                 return await listReactionRoles(guild, input);
 
+            case 'send_button_message':
+                return await sendButtonMessage(guild, input);
+
             // ===== SERVER SETTINGS =====
             case 'set_server_name':
                 return await actionHandler.setServerName(guild, input);
@@ -1360,6 +1363,116 @@ async function listReactionRoles(guild, input) {
         return await reactionRoleService.listReactionRoles(guild);
     } catch (error) {
         return { success: false, error: `Failed to list reaction roles: ${error.message}` };
+    }
+}
+
+async function sendButtonMessage(guild, input) {
+    try {
+        const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+        const channel = findChannel(guild, input.channelName);
+
+        if (!channel) {
+            return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
+        }
+
+        // Build message payload
+        const messagePayload = {};
+
+        // Add content if provided
+        if (input.content) {
+            messagePayload.content = input.content;
+        }
+
+        // Build embed if provided
+        if (input.embed) {
+            const embed = new EmbedBuilder();
+            if (input.embed.title) embed.setTitle(input.embed.title);
+            if (input.embed.description) embed.setDescription(input.embed.description);
+            if (input.embed.color) embed.setColor(input.embed.color);
+            if (input.embed.footer) embed.setFooter({ text: input.embed.footer });
+            if (input.embed.thumbnail) embed.setThumbnail(input.embed.thumbnail);
+            if (input.embed.image) embed.setImage(input.embed.image);
+            if (input.embed.fields?.length) {
+                for (const field of input.embed.fields) {
+                    embed.addFields({
+                        name: field.name,
+                        value: field.value,
+                        inline: field.inline || false
+                    });
+                }
+            }
+            messagePayload.embeds = [embed];
+        }
+
+        // Build buttons
+        const rows = [];
+        const styleMap = {
+            'primary': ButtonStyle.Primary,
+            'secondary': ButtonStyle.Secondary,
+            'success': ButtonStyle.Success,
+            'danger': ButtonStyle.Danger,
+            'link': ButtonStyle.Link
+        };
+
+        // Group buttons into rows (max 5 buttons per row)
+        for (let i = 0; i < input.buttons.length; i += 5) {
+            const row = new ActionRowBuilder();
+            const buttonsInRow = input.buttons.slice(i, i + 5);
+
+            for (const buttonConfig of buttonsInRow) {
+                const button = new ButtonBuilder()
+                    .setLabel(buttonConfig.label)
+                    .setStyle(styleMap[buttonConfig.style] || ButtonStyle.Primary);
+
+                // Set custom ID or URL based on style
+                if (buttonConfig.style === 'link') {
+                    if (!buttonConfig.url) {
+                        return { success: false, error: `Link button "${buttonConfig.label}" requires a URL` };
+                    }
+                    button.setURL(buttonConfig.url);
+                } else {
+                    button.setCustomId(buttonConfig.customId);
+                }
+
+                // Add emoji if provided
+                if (buttonConfig.emoji) {
+                    button.setEmoji(buttonConfig.emoji);
+                }
+
+                // Set disabled state
+                if (buttonConfig.disabled) {
+                    button.setDisabled(true);
+                }
+
+                row.addComponents(button);
+            }
+
+            rows.push(row);
+
+            // Discord allows max 5 action rows
+            if (rows.length >= 5) break;
+        }
+
+        messagePayload.components = rows;
+
+        // Send the message
+        const message = await retryWithBackoff(
+            () => channel.send(messagePayload),
+            {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                operationName: 'Send Button Message'
+            }
+        );
+
+        return {
+            success: true,
+            message: `Button message sent to #${channel.name}`,
+            message_id: message.id,
+            button_count: input.buttons.length
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to send button message: ${error.message}` };
     }
 }
 
