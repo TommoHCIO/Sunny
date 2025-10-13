@@ -260,30 +260,131 @@ client.on('messageReactionRemove', async (reaction, user) => {
     }
 });
 
-// Button interaction events (for ticket management and ticket panel)
+// Button and Modal interaction events (for ticket management and ticket panel)
 client.on('interactionCreate', async (interaction) => {
     try {
+        // Handle modal submissions
+        if (interaction.isModalSubmit()) {
+            if (interaction.customId === 'ticket_create_modal') {
+                await interaction.deferReply({ ephemeral: true });
+                
+                try {
+                    // Extract form values
+                    const category = interaction.fields.getTextInputValue('ticket_category').toLowerCase().trim();
+                    const subject = interaction.fields.getTextInputValue('ticket_subject').trim();
+                    const description = interaction.fields.getTextInputValue('ticket_description').trim();
+                    let priority = interaction.fields.getTextInputValue('ticket_priority')?.toLowerCase().trim() || 'normal';
+                    
+                    // Validate category
+                    const validCategories = ['support', 'bug', 'feature', 'question'];
+                    if (!validCategories.includes(category)) {
+                        await interaction.editReply(
+                            `❌ **Invalid Category**\n\n` +
+                            `Please use one of: ${validCategories.join(', ')}`
+                        );
+                        return;
+                    }
+                    
+                    // Validate priority
+                    const validPriorities = ['low', 'normal', 'high', 'urgent'];
+                    if (!validPriorities.includes(priority)) {
+                        priority = 'normal'; // Default to normal if invalid
+                    }
+                    
+                    // Create the ticket
+                    const ticket = await ticketService.createTicket(
+                        interaction.guild.id,
+                        interaction.member,
+                        category,
+                        subject,
+                        description,
+                        priority
+                    );
+                    
+                    await interaction.editReply(
+                        `✅ **Ticket Created Successfully!**\n\n` +
+                        `🎫 **Ticket #${ticket.ticketNumber}**\n` +
+                        `📁 Category: ${category}\n` +
+                        `📌 Subject: ${subject}\n` +
+                        `⚡ Priority: ${priority}\n\n` +
+                        `Your ticket thread has been created. Please check <#${ticket.threadId}> to continue the conversation with our support team.`
+                    );
+                } catch (error) {
+                    logger.error('Error creating ticket from modal:', error);
+                    await interaction.editReply(
+                        `❌ **Failed to create ticket**\n\n` +
+                        `Error: ${error.message}\n\n` +
+                        `Please try again or contact a staff member.`
+                    );
+                }
+            }
+            return;
+        }
+        
         if (!interaction.isButton()) return;
         
         const customId = interaction.customId;
         
         // Handle ticket panel buttons (create new ticket)
         if (customId.startsWith('ticket_panel_')) {
-            await interaction.deferReply({ ephemeral: true });
-            
             const action = customId.replace('ticket_panel_', '');
             
             if (action === 'create') {
-                // For now, send instructions to use text command
-                // TODO: Implement modal form for ticket creation
-                await interaction.editReply(
-                    '🎫 **Create a Ticket**\n\n' +
-                    'To create a ticket, please send a message in this channel like:\n' +
-                    '`sunny create a support ticket about [your issue]`\n\n' +
-                    '**Example:**\n' +
-                    '`sunny create a support ticket about role permissions not working`'
-                );
+                // Show modal form for ticket creation
+                const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+                
+                const modal = new ModalBuilder()
+                    .setCustomId('ticket_create_modal')
+                    .setTitle('Create a Support Ticket');
+                
+                // Category selection (short text input)
+                const categoryInput = new TextInputBuilder()
+                    .setCustomId('ticket_category')
+                    .setLabel('Category')
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder('support, bug, feature, question')
+                    .setRequired(true)
+                    .setMaxLength(50);
+                
+                // Subject input
+                const subjectInput = new TextInputBuilder()
+                    .setCustomId('ticket_subject')
+                    .setLabel('Subject')
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder('Brief summary of your issue')
+                    .setRequired(true)
+                    .setMaxLength(100);
+                
+                // Description input
+                const descriptionInput = new TextInputBuilder()
+                    .setCustomId('ticket_description')
+                    .setLabel('Description')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setPlaceholder('Please provide details about your issue...')
+                    .setRequired(true)
+                    .setMaxLength(1000);
+                
+                // Priority input
+                const priorityInput = new TextInputBuilder()
+                    .setCustomId('ticket_priority')
+                    .setLabel('Priority')
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder('low, normal, high, urgent (default: normal)')
+                    .setRequired(false)
+                    .setValue('normal')
+                    .setMaxLength(10);
+                
+                // Add inputs to action rows (one per row)
+                const categoryRow = new ActionRowBuilder().addComponents(categoryInput);
+                const subjectRow = new ActionRowBuilder().addComponents(subjectInput);
+                const descriptionRow = new ActionRowBuilder().addComponents(descriptionInput);
+                const priorityRow = new ActionRowBuilder().addComponents(priorityInput);
+                
+                modal.addComponents(categoryRow, subjectRow, descriptionRow, priorityRow);
+                
+                await interaction.showModal(modal);
             } else if (action === 'view') {
+                await interaction.deferReply({ ephemeral: true });
                 // View user's tickets
                 try {
                     const tickets = await ticketService.listTickets(interaction.guild.id, {
