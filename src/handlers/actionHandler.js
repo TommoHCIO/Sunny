@@ -1,6 +1,7 @@
 // src/handlers/actionHandler.js
-const { ChannelType, PermissionFlagsBits } = require('discord.js');
+const { ChannelType, PermissionFlagsBits, AttachmentBuilder } = require('discord.js');
 const { isOwner } = require('../utils/permissions');
+const imageService = require('../services/imageService');
 
 /**
  * Comprehensive action handler for all Discord server management commands
@@ -1129,20 +1130,42 @@ class ActionHandler {
     async createEmoji(guild, action) {
         const { emojiName, emojiUrl, roles } = action;
 
-        const emoji = await guild.emojis.create({
-            attachment: emojiUrl,
-            name: emojiName,
-            roles: roles ? roles.split(',') : []
-        });
+        try {
+            // Check if the file is an image URL that needs processing
+            let fileToUpload = emojiUrl;
 
-        this.log('✅', `Created emoji: ${emojiName}`);
+            if (imageService.isImageUrl(emojiUrl)) {
+                this.log('🖼️', `Processing image for emoji: ${emojiName}`);
 
-        return {
-            success: true,
-            message: `Created emoji: ${emojiName}`,
-            emoji_id: emoji.id,
-            emoji_name: emoji.name
-        };
+                // Process image (resize, compress)
+                const processedBuffer = await imageService.processImageForEmoji(emojiUrl);
+
+                // Create AttachmentBuilder from processed buffer
+                fileToUpload = new AttachmentBuilder(processedBuffer, {
+                    name: `${emojiName}.png`
+                });
+
+                this.log('✅', `Image processed successfully for emoji: ${emojiName}`);
+            }
+
+            const emoji = await guild.emojis.create({
+                attachment: fileToUpload,
+                name: emojiName,
+                roles: roles ? roles.split(',') : []
+            });
+
+            this.log('✅', `Created emoji: ${emojiName}`);
+
+            return {
+                success: true,
+                message: `Created emoji: ${emojiName}`,
+                emoji_id: emoji.id,
+                emoji_name: emoji.name
+            };
+        } catch (error) {
+            this.log('❌', `Failed to create emoji: ${error.message}`);
+            throw error;
+        }
     }
 
     async editEmoji(guild, action) {
@@ -1195,21 +1218,43 @@ class ActionHandler {
     async createSticker(guild, action) {
         const { stickerName, stickerFile, description, emoji } = action;
 
-        const sticker = await guild.stickers.create({
-            file: stickerFile,
-            name: stickerName,
-            tags: emoji || '🍂',
-            description: description || stickerName
-        });
+        try {
+            // Check if the file is an image URL that needs processing
+            let fileToUpload = stickerFile;
 
-        this.log('✅', `Created sticker: ${stickerName}`);
+            if (imageService.isImageUrl(stickerFile)) {
+                this.log('🖼️', `Processing image for sticker: ${stickerName}`);
 
-        return {
-            success: true,
-            message: `Created sticker: ${stickerName}`,
-            sticker_id: sticker.id,
-            sticker_name: sticker.name
-        };
+                // Process image (resize, compress)
+                const processedBuffer = await imageService.processImageForSticker(stickerFile);
+
+                // Create AttachmentBuilder from processed buffer
+                fileToUpload = new AttachmentBuilder(processedBuffer, {
+                    name: `${stickerName}.png`
+                });
+
+                this.log('✅', `Image processed successfully for sticker: ${stickerName}`);
+            }
+
+            const sticker = await guild.stickers.create({
+                file: fileToUpload,
+                name: stickerName,
+                tags: emoji || '🍂',
+                description: description || stickerName
+            });
+
+            this.log('✅', `Created sticker: ${stickerName}`);
+
+            return {
+                success: true,
+                message: `Created sticker: ${stickerName}`,
+                sticker_id: sticker.id,
+                sticker_name: sticker.name
+            };
+        } catch (error) {
+            this.log('❌', `Failed to create sticker: ${error.message}`);
+            throw error;
+        }
     }
 
     async editSticker(guild, action) {
