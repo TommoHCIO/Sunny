@@ -387,22 +387,106 @@ client.on('interactionCreate', async (interaction) => {
                 await interaction.deferReply({ ephemeral: true });
                 // View user's tickets
                 try {
-                    const tickets = await ticketService.listTickets(interaction.guild.id, {
+                    const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+                    
+                    // Fetch all tickets (open, in-progress, and closed)
+                    const openTickets = await ticketService.listTickets(interaction.guild.id, {
                         creatorId: interaction.user.id,
                         status: { $in: ['open', 'in-progress'] }
                     });
                     
-                    if (tickets.length === 0) {
-                        await interaction.editReply('📭 You have no open tickets.');
-                    } else {
-                        const ticketList = tickets.map(t => 
-                            `**Ticket #${t.ticketNumber}** - ${t.subject}\n` +
-                            `Status: ${t.status} | Category: ${t.category}`
-                        ).join('\n\n');
+                    const closedTickets = await ticketService.listTickets(interaction.guild.id, {
+                        creatorId: interaction.user.id,
+                        status: 'closed'
+                    });
+                    
+                    // Create embed
+                    const embed = new EmbedBuilder()
+                        .setColor('#D2691E') // Autumn chocolate brown
+                        .setTitle('🎫 Your Tickets')
+                        .setFooter({ text: `Total: ${openTickets.length + closedTickets.length} ticket(s)` })
+                        .setTimestamp();
+                    
+                    // Priority emoji mapping
+                    const priorityEmoji = {
+                        'low': '🟢',
+                        'normal': '🟡',
+                        'high': '🟠',
+                        'urgent': '🔴'
+                    };
+                    
+                    // Status emoji mapping
+                    const statusEmoji = {
+                        'open': '🟢',
+                        'in-progress': '🔵',
+                        'closed': '⚫'
+                    };
+                    
+                    // Add open/in-progress tickets
+                    if (openTickets.length > 0) {
+                        const openList = openTickets.map(t => {
+                            const priority = priorityEmoji[t.priority] || '⚪';
+                            const status = statusEmoji[t.status] || '⚪';
+                            const assignedText = t.assignedTo ? `\n👤 Assigned to: <@${t.assignedTo}>` : '';
+                            const createdAt = new Date(t.createdAt).toLocaleDateString();
+                            
+                            return (
+                                `**#${t.ticketNumber}** - ${t.subject}\n` +
+                                `${status} Status: \`${t.status}\` | ${priority} Priority: \`${t.priority}\`\n` +
+                                `📁 Category: \`${t.category}\` | 📅 Created: ${createdAt}` +
+                                assignedText +
+                                `\n🔗 [Open Ticket](<#${t.threadId}>)`
+                            );
+                        }).join('\n\n');
                         
-                        await interaction.editReply(`🎫 **Your Open Tickets:**\n\n${ticketList}`);
+                        embed.addFields({
+                            name: '📂 Active Tickets',
+                            value: openList.length > 1024 ? openList.substring(0, 1021) + '...' : openList
+                        });
+                    } else {
+                        embed.addFields({
+                            name: '📂 Active Tickets',
+                            value: '📭 No active tickets'
+                        });
                     }
+                    
+                    // Add recently closed tickets (last 3)
+                    if (closedTickets.length > 0) {
+                        const recentClosed = closedTickets.slice(0, 3).map(t => {
+                            const closedAt = new Date(t.updatedAt).toLocaleDateString();
+                            return `**#${t.ticketNumber}** - ${t.subject} (Closed: ${closedAt})`;
+                        }).join('\n');
+                        
+                        embed.addFields({
+                            name: '✅ Recently Closed',
+                            value: recentClosed
+                        });
+                    }
+                    
+                    // Add buttons for quick actions
+                    const row = new ActionRowBuilder();
+                    
+                    if (openTickets.length > 0) {
+                        // Add "Go to Ticket" buttons for first 2 open tickets
+                        openTickets.slice(0, 2).forEach(t => {
+                            row.addComponents(
+                                new ButtonBuilder()
+                                    .setLabel(`#${t.ticketNumber}`)
+                                    .setStyle(ButtonStyle.Link)
+                                    .setURL(`https://discord.com/channels/${interaction.guild.id}/${t.threadId}`)
+                                    .setEmoji('🎫')
+                            );
+                        });
+                    }
+                    
+                    const messagePayload = { embeds: [embed], ephemeral: true };
+                    if (row.components.length > 0) {
+                        messagePayload.components = [row];
+                    }
+                    
+                    await interaction.editReply(messagePayload);
                 } catch (error) {
+                    logger.error('Error viewing tickets:', error);
                     await interaction.editReply(`❌ Failed to view tickets: ${error.message}`);
                 }
             }
