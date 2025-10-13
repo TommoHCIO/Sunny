@@ -21,7 +21,7 @@ const crypto = require('crypto');
  */
 async function convertMP4ToAPNG(videoUrl) {
     let tempInputPath = null;
-    let tempOutputPath = null;
+    let tempFiles = [];
 
     try {
         console.log(`[VideoService] Converting MP4 to APNG: ${videoUrl}`);
@@ -29,7 +29,6 @@ async function convertMP4ToAPNG(videoUrl) {
         // Create temp file paths
         const tempId = crypto.randomBytes(16).toString('hex');
         tempInputPath = path.join(process.cwd(), `temp_${tempId}_input.mp4`);
-        tempOutputPath = path.join(process.cwd(), `temp_${tempId}_output.apng`);
 
         // Download video from URL
         console.log(`[VideoService] Downloading video...`);
@@ -37,38 +36,53 @@ async function convertMP4ToAPNG(videoUrl) {
         await fs.writeFile(tempInputPath, videoBuffer);
         console.log(`[VideoService] Video downloaded: ${(videoBuffer.length / 1024).toFixed(2)} KB`);
 
-        // Convert MP4 to APNG using FFmpeg
-        console.log(`[VideoService] Starting FFmpeg conversion...`);
-        await runFFmpegConversion(tempInputPath, tempOutputPath);
+        // Progressive compression settings
+        const compressionLevels = [
+            { fps: 30, duration: 5, scale: 320, description: 'Normal quality' },
+            { fps: 20, duration: 4, scale: 320, description: 'Reduced FPS' },
+            { fps: 15, duration: 3, scale: 280, description: 'Lower FPS & duration' },
+            { fps: 12, duration: 2.5, scale: 240, description: 'Aggressive compression' },
+            { fps: 10, duration: 2, scale: 200, description: 'Very aggressive' },
+            { fps: 8, duration: 1.5, scale: 160, description: 'Maximum compression' },
+            { fps: 6, duration: 1, scale: 120, description: 'Last resort' }
+        ];
 
-        // Read the output file
-        const apngBuffer = await fs.readFile(tempOutputPath);
-        const sizeInKB = (apngBuffer.length / 1024).toFixed(2);
-        console.log(`[VideoService] ✅ APNG created: ${sizeInKB} KB`);
+        let finalBuffer = null;
+        let attempts = 0;
 
-        // Check if size is within Discord limits
-        if (apngBuffer.length > 500000) {
-            console.log(`[VideoService] APNG too large (${sizeInKB} KB), attempting aggressive compression...`);
+        for (const level of compressionLevels) {
+            attempts++;
+            const tempOutputPath = path.join(process.cwd(), `temp_${tempId}_level${attempts}.apng`);
+            tempFiles.push(tempOutputPath);
 
-            // Try again with more aggressive compression
-            const compressedPath = path.join(process.cwd(), `temp_${tempId}_compressed.apng`);
-            await runFFmpegConversion(tempInputPath, compressedPath, true);
+            console.log(`[VideoService] Attempt ${attempts}: ${level.description} (${level.fps}fps, ${level.duration}s, ${level.scale}px)`);
 
-            const compressedBuffer = await fs.readFile(compressedPath);
-            const compressedSizeKB = (compressedBuffer.length / 1024).toFixed(2);
-            console.log(`[VideoService] Compressed APNG: ${compressedSizeKB} KB`);
+            await runFFmpegCompressionLevel(tempInputPath, tempOutputPath, level);
 
-            // Cleanup compressed temp file
-            await fs.unlink(compressedPath).catch(() => {});
+            // Read the output file
+            const apngBuffer = await fs.readFile(tempOutputPath);
+            const sizeInKB = (apngBuffer.length / 1024).toFixed(2);
+            console.log(`[VideoService] APNG size: ${sizeInKB} KB`);
 
-            if (compressedBuffer.length > 500000) {
-                throw new Error(`APNG still too large after compression: ${compressedSizeKB} KB. Discord limit is 500KB.`);
+            // Check if size is within Discord limits (target 480KB to be safe)
+            if (apngBuffer.length <= 480000) {
+                console.log(`[VideoService] ✅ Success! APNG is under 480KB limit`);
+                finalBuffer = apngBuffer;
+                break;
+            } else {
+                console.log(`[VideoService] Still too large (${sizeInKB} KB), trying next compression level...`);
             }
 
-            return compressedBuffer;
+            // Cleanup this attempt's file if not the final one
+            await fs.unlink(tempOutputPath).catch(() => {});
+            tempFiles.pop();
         }
 
-        return apngBuffer;
+        if (!finalBuffer) {
+            throw new Error(`Could not compress video under 480KB even with maximum compression. Video may be too complex.`);
+        }
+
+        return finalBuffer;
 
     } catch (error) {
         console.error('[VideoService] Failed to convert MP4 to APNG:', error);
@@ -78,43 +92,33 @@ async function convertMP4ToAPNG(videoUrl) {
         if (tempInputPath) {
             await fs.unlink(tempInputPath).catch(() => {});
         }
-        if (tempOutputPath) {
-            await fs.unlink(tempOutputPath).catch(() => {});
+        for (const tempFile of tempFiles) {
+            await fs.unlink(tempFile).catch(() => {});
         }
     }
 }
 
 /**
- * Run FFmpeg conversion process
+ * Run FFmpeg conversion with specific compression level
  *
  * @param {string} inputPath - Path to input MP4 file
  * @param {string} outputPath - Path to output APNG file
- * @param {boolean} aggressive - Use aggressive compression settings
+ * @param {Object} level - Compression level settings
  * @returns {Promise<void>}
  */
-function runFFmpegConversion(inputPath, outputPath, aggressive = false) {
+function runFFmpegCompressionLevel(inputPath, outputPath, level) {
     return new Promise((resolve, reject) => {
-        // Build FFmpeg arguments
+        // Build FFmpeg arguments with compression level settings
         const args = [
+            '-t', level.duration.toString(), // Duration limit
             '-i', inputPath,
-            '-vf', aggressive
-                ? 'scale=320:320:force_original_aspect_ratio=decrease,pad=320:320:(ow-iw)/2:(oh-ih)/2,fps=15' // Lower FPS for smaller size
-                : 'scale=320:320:force_original_aspect_ratio=decrease,pad=320:320:(ow-iw)/2:(oh-ih)/2,fps=30', // Normal FPS
+            '-vf', `scale=${level.scale}:${level.scale}:force_original_aspect_ratio=decrease,pad=${level.scale}:${level.scale}:(ow-iw)/2:(oh-ih)/2,fps=${level.fps}`,
             '-plays', '0', // Loop forever
             '-pred', 'mixed', // Better APNG compression
+            '-y', outputPath // Overwrite if exists
         ];
 
-        // Add duration limit for aggressive compression
-        if (aggressive) {
-            args.unshift('-t', '3'); // Limit to 3 seconds
-        } else {
-            args.unshift('-t', '5'); // Limit to 5 seconds normally
-        }
-
-        // Add output path
-        args.push('-y', outputPath); // -y to overwrite if exists
-
-        console.log(`[VideoService] FFmpeg command: ${ffmpegPath} ${args.join(' ')}`);
+        console.log(`[VideoService] FFmpeg: ${level.description}`);
 
         const ffmpeg = spawn(ffmpegPath, args);
 
