@@ -149,10 +149,27 @@ async function downloadImage(imageUrl) {
 function isImageUrl(url) {
     if (!url || typeof url !== 'string') return false;
 
-    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
+    // Check if it's a Discord CDN URL (always images)
+    if (url.includes('cdn.discordapp.com') || url.includes('media.discordapp.net')) {
+        return true;
+    }
+
+    // Check for common image extensions
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.apng'];
     const urlLower = url.toLowerCase();
 
-    return imageExtensions.some(ext => urlLower.includes(ext));
+    // Check if URL contains image extension
+    if (imageExtensions.some(ext => urlLower.includes(ext))) {
+        return true;
+    }
+
+    // For URLs without extensions (like picsum.photos), try to process them
+    // This allows processing of dynamic image URLs
+    if (urlLower.startsWith('http://') || urlLower.startsWith('https://')) {
+        return true;
+    }
+
+    return false;
 }
 
 module.exports = {
