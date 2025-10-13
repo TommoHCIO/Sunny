@@ -119,6 +119,67 @@ const serverSettingsSchema = new mongoose.Schema({
     language: {
         type: String,
         default: 'en'
+    },
+    autoMessages: {
+        welcomeEnabled: {
+            type: Boolean,
+            default: false
+        },
+        goodbyeEnabled: {
+            type: Boolean,
+            default: false
+        },
+        milestonesEnabled: {
+            type: Boolean,
+            default: false
+        },
+        triggersEnabled: {
+            type: Boolean,
+            default: false
+        }
+    },
+    ticketing: {
+        enabled: {
+            type: Boolean,
+            default: false
+        },
+        supportChannelId: {
+            type: String,
+            default: null
+        },
+        staffNotifyChannelId: {
+            type: String,
+            default: null
+        },
+        staffRoleIds: {
+            type: [String],
+            default: []
+        },
+        categories: [{
+            name: String,
+            emoji: String,
+            autoAssignRoleId: String
+        }],
+        autoClose: {
+            enabled: {
+                type: Boolean,
+                default: false
+            },
+            inactivityDays: {
+                type: Number,
+                default: 7
+            }
+        },
+        transcripts: {
+            enabled: {
+                type: Boolean,
+                default: true
+            },
+            channelId: {
+                type: String,
+                default: null
+            }
+        }
     }
 }, {
     timestamps: true

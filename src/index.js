@@ -60,6 +60,8 @@ const { detectBotProcesses, logProcessInfo } = require('./utils/processDetector'
 const reactionRoleService = require('./services/reactionRoleService');
 const moderationService = require('./services/moderationService');
 const databaseService = require('./services/database/databaseService');
+const autoMessageService = require('./services/autoMessageService');
+const ticketService = require('./services/ticketService');
 
 // Connect to MongoDB (async function to await connection)
 let mongoConnected = false;
@@ -152,6 +154,14 @@ client.once('ready', async () => {
         logger.error('⚠️  Failed to load reaction roles:', error);
     }
     
+    // Initialize scheduled messages (cron jobs)
+    try {
+        await autoMessageService.initializeScheduledMessages(client);
+        logger.info('✅ Scheduled messages initialized');
+    } catch (error) {
+        logger.error('⚠️  Failed to initialize scheduled messages:', error);
+    }
+    
     // Set bot status
     client.user.setPresence({
         activities: [{ name: 'The Nook 🍂', type: 3 }], // Type 3 = Watching
@@ -191,6 +201,9 @@ client.once('ready', async () => {
 client.on('messageCreate', async (message) => {
     try {
         await messageHandler(client, message);
+        
+        // Check for trigger-based auto messages
+        await autoMessageService.checkTriggers(message);
     } catch (error) {
         logger.error('Error in messageCreate:', error);
         errorHandler(message, error);
@@ -244,6 +257,57 @@ client.on('messageReactionRemove', async (reaction, user) => {
         }
     } catch (error) {
         logger.error('Error in messageReactionRemove:', error);
+    }
+});
+
+// Button interaction events (for ticket management)
+client.on('interactionCreate', async (interaction) => {
+    try {
+        if (!interaction.isButton()) return;
+        
+        const customId = interaction.customId;
+        
+        // Handle ticket buttons
+        if (customId.startsWith('ticket_')) {
+            await interaction.deferReply({ ephemeral: true });
+            
+            const [action, type, ticketId] = customId.split('_');
+            
+            if (type === 'claim') {
+                try {
+                    await ticketService.assignTicket(ticketId, interaction.member);
+                    await interaction.editReply('✅ Ticket claimed successfully!');
+                } catch (error) {
+                    await interaction.editReply(`❌ Failed to claim ticket: ${error.message}`);
+                }
+            } else if (type === 'close') {
+                try {
+                    await ticketService.closeTicket(ticketId, interaction.member, 'Closed by staff');
+                    await interaction.editReply('✅ Ticket closed successfully!');
+                } catch (error) {
+                    await interaction.editReply(`❌ Failed to close ticket: ${error.message}`);
+                }
+            } else if (type === 'priority') {
+                // Simple priority toggle: normal -> high -> urgent -> normal
+                try {
+                    const ticket = await ticketService.getTicket(ticketId);
+                    let newPriority = 'high';
+                    if (ticket.priority === 'normal') newPriority = 'high';
+                    else if (ticket.priority === 'high') newPriority = 'urgent';
+                    else if (ticket.priority === 'urgent') newPriority = 'normal';
+                    
+                    await ticketService.updateTicketPriority(ticketId, newPriority);
+                    await interaction.editReply(`✅ Ticket priority updated to: ${newPriority}`);
+                } catch (error) {
+                    await interaction.editReply(`❌ Failed to update priority: ${error.message}`);
+                }
+            }
+        }
+    } catch (error) {
+        logger.error('Error in interactionCreate:', error);
+        if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({ content: 'An error occurred processing this interaction.', ephemeral: true });
+        }
     }
 });
 
@@ -452,6 +516,9 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Handle SIGHUP (terminal closed)
 process.on('SIGHUP', () => gracefulShutdown('SIGHUP'));
+
+// Export client for autoMessageService to access in scheduled messages
+module.exports = { client };
 
 // Login to Discord
 if (!process.env.DISCORD_TOKEN) {
