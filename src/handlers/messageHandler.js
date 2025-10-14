@@ -7,6 +7,7 @@ const messageTracker = require('../utils/messageTracker');
 const moderationService = require('../services/moderationService');
 const statusService = require('../services/statusService');
 const { splitMessage } = require('../utils/messageSplitter');
+const memoryService = require('../services/memoryService');
 
 // Bot startup time - used to filter out old messages
 const BOT_START_TIME = Date.now();
@@ -62,6 +63,9 @@ module.exports = async function handleMessage(client, message) {
 
     // Add message to context (for all messages)
     await contextService.addMessage(message.channel.id, message);
+
+    // Record interaction for memory system (if enabled)
+    await memoryService.recordInteraction(message);
     
     // Check for violations BEFORE deciding if Sunny should respond
     // This ensures harmful messages are moderated even if they don't @mention Sunny

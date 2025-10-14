@@ -5,6 +5,7 @@
  */
 
 const databaseService = require('./database/databaseService');
+const memoryService = require('./memoryService');
 
 /**
  * Context Service for managing conversation history and context
@@ -26,7 +27,8 @@ class ContextService {
     constructor() {
         // In-memory store (per-channel context)
         this.channelContexts = new Map();
-        this.maxMessages = parseInt(process.env.CONTEXT_MAX_MESSAGES) || 10;
+        this.maxMessages = parseInt(process.env.CONTEXT_MAX_MESSAGES) || 20; // Increased from 10
+        this.summarizeAfter = parseInt(process.env.CONTEXT_SUMMARIZE_AFTER) || 30;
     }
     
     /**
@@ -160,21 +162,50 @@ class ContextService {
     async buildContextPrompt(channelId, currentMessage, replyContext = null) {
         const context = await this.getContext(channelId);
 
-        let prompt = 'Recent conversation context:\n\n';
+        let prompt = '';
 
-        // Add conversation history with user IDs for moderation actions
-        context.forEach(msg => {
-            prompt += `${msg.author} (ID: ${msg.authorId}): ${msg.content}`;
+        // Add memory context if enabled
+        if (memoryService.enabled) {
+            const memoryContext = await memoryService.buildMemoryContext(
+                currentMessage.author.id,
+                currentMessage.guild.id,
+                channelId,
+                currentMessage.content
+            );
 
-            // Include attachment info in history
-            if (msg.attachments && msg.attachments.length > 0) {
-                const attachmentInfo = msg.attachments.map(att =>
-                    `${att.name} (${att.contentType})`
-                ).join(', ');
-                prompt += ` [Attached: ${attachmentInfo}]`;
+            if (memoryContext) {
+                prompt += memoryContext + '\n\n';
             }
-            prompt += '\n';
-        });
+        }
+
+        prompt += 'Recent conversation context:\n\n';
+
+        // Check if we should summarize (too many messages)
+        if (context.length > this.summarizeAfter && memoryService.enabled) {
+            const summary = await memoryService.summarizeConversation(context.slice(0, -10));
+            if (summary) {
+                prompt += `[Previous conversation summary: ${summary}]\n\n`;
+                // Show only last 10 messages after summary
+                const recentContext = context.slice(-10);
+                recentContext.forEach(msg => {
+                    prompt += `${msg.author} (ID: ${msg.authorId}): ${msg.content}\n`;
+                });
+            }
+        } else {
+            // Add full conversation history with user IDs for moderation actions
+            context.forEach(msg => {
+                prompt += `${msg.author} (ID: ${msg.authorId}): ${msg.content}`;
+
+                // Include attachment info in history
+                if (msg.attachments && msg.attachments.length > 0) {
+                    const attachmentInfo = msg.attachments.map(att =>
+                        `${att.name} (${att.contentType})`
+                    ).join(', ');
+                    prompt += ` [Attached: ${attachmentInfo}]`;
+                }
+                prompt += '\n';
+            });
+        }
 
         // Add reply context if applicable
         if (replyContext) {
