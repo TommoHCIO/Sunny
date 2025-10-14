@@ -12,10 +12,11 @@ const {
     StringSelectMenuBuilder,
     PollLayoutType
 } = require('discord.js');
-const { GameManager } = require('discord-trivia');
+// Removed discord-trivia dependency - using custom implementation
 const UserMemory = require('../models/UserMemory');
 
-// Note: We'll create GameManager instances per game to avoid state issues
+// Store Discord client instance (will be set on initialization)
+let discordClient = null;
 
 // Store active games per channel to prevent multiple games
 const activeGames = new Map();
@@ -25,6 +26,15 @@ const activePolls = new Map();
 
 // Mini-game state tracking
 const activeMiniGames = new Map();
+
+/**
+ * Initialize the game service with Discord client
+ * @param {Client} client - Discord.js client instance
+ */
+function initialize(client) {
+    discordClient = client;
+    console.log('🎮 Game service initialized with Discord client');
+}
 
 /**
  * Start a trivia game in a channel
@@ -42,55 +52,100 @@ async function startTrivia(channel, options = {}) {
             };
         }
 
-        // Set default options
-        const gameOptions = {
-            category: options.category || 'general',
-            difficulty: options.difficulty || 'medium',
-            questionCount: options.questionCount || 10,
-            ...options
-        };
-
-        // Mark channel as having active game
-        activeGames.set(channel.id, true);
-
-        // Create a new GameManager instance for this game
-        const gameManager = new GameManager();
-        const game = gameManager.createGame(channel);
+        // For now, let's create a simple trivia implementation
+        // Since discord-trivia package requires specific Discord.js objects
+        // We'll use a basic trivia system instead
         
-        // Configure the game based on options
-        if (options.category && options.category !== 'general') {
-            // Map our category names to Open Trivia DB category IDs
-            const categoryMap = {
-                'science': 17, // Science & Nature
-                'history': 23, // History  
-                'entertainment': 11, // Film
-                'sports': 21, // Sports
-                'geography': 22, // Geography
-                'general': 9 // General Knowledge
+        const triviaQuestions = [
+            {
+                question: "What is the capital of France?",
+                answers: ["Paris", "London", "Berlin", "Madrid"],
+                correct: 0,
+                category: "geography"
+            },
+            {
+                question: "What year did World War II end?",
+                answers: ["1943", "1944", "1945", "1946"],
+                correct: 2,
+                category: "history"
+            },
+            {
+                question: "What is the largest planet in our solar system?",
+                answers: ["Earth", "Mars", "Jupiter", "Saturn"],
+                correct: 2,
+                category: "science"
+            },
+            {
+                question: "Who painted the Mona Lisa?",
+                answers: ["Michelangelo", "Leonardo da Vinci", "Raphael", "Donatello"],
+                correct: 1,
+                category: "general"
+            },
+            {
+                question: "What is the chemical symbol for gold?",
+                answers: ["Go", "Gd", "Au", "Ag"],
+                correct: 2,
+                category: "science"
+            }
+        ];
+
+        // Filter questions by category if specified
+        const category = options.category || 'general';
+        const filteredQuestions = category === 'general' 
+            ? triviaQuestions 
+            : triviaQuestions.filter(q => q.category === category.toLowerCase());
+
+        if (filteredQuestions.length === 0) {
+            return {
+                success: false,
+                error: `No questions available for category: ${category}`
             };
-            const categoryId = categoryMap[options.category.toLowerCase()] || 9;
-            game.setCategory(categoryId);
         }
-        
-        if (options.difficulty) {
-            game.setDifficulty(options.difficulty.toLowerCase());
-        }
-        
-        if (options.questionCount) {
-            game.setQuestionCount(Math.min(options.questionCount, 10));
-        }
-        
-        // Start the game queue
-        game.startQueue().then(() => {
-            activeGames.delete(channel.id);
-        }).catch((error) => {
-            console.error('Trivia game error:', error);
-            activeGames.delete(channel.id);
+
+        // Select a random question
+        const question = filteredQuestions[Math.floor(Math.random() * filteredQuestions.length)];
+
+        // Create embed with question
+        const embed = new EmbedBuilder()
+            .setColor('#00CED1')
+            .setTitle('🧠 Trivia Question!')
+            .setDescription(question.question)
+            .addFields(
+                question.answers.map((answer, index) => ({
+                    name: `${['A', 'B', 'C', 'D'][index]}`,
+                    value: answer,
+                    inline: true
+                }))
+            )
+            .setFooter({ text: `Category: ${question.category} | You have 30 seconds to answer!` });
+
+        await channel.send({ embeds: [embed] });
+
+        // Mark game as active
+        activeGames.set(channel.id, {
+            type: 'trivia',
+            question: question,
+            startTime: Date.now()
         });
+
+        // Send the answer after 30 seconds
+        setTimeout(async () => {
+            if (activeGames.has(channel.id)) {
+                const correctAnswer = question.answers[question.correct];
+                const resultEmbed = new EmbedBuilder()
+                    .setColor('#FFD700')
+                    .setTitle('⏰ Time\'s Up!')
+                    .setDescription(`The correct answer was: **${['A', 'B', 'C', 'D'][question.correct]}. ${correctAnswer}**`)
+                    .setTimestamp();
+                
+                await channel.send({ embeds: [resultEmbed] });
+                activeGames.delete(channel.id);
+            }
+        }, 30000);
 
         return {
             success: true,
-            message: 'Trivia game started! Get ready for the first question...'
+            message: 'Trivia question sent! Players have 30 seconds to answer.'
         };
     } catch (error) {
         activeGames.delete(channel.id);
@@ -184,9 +239,10 @@ async function createPoll(options) {
 
 /**
  * Start a rock-paper-scissors game
- * @param {Interaction} interaction - Discord interaction
+ * @param {TextChannel} channel - Discord channel
+ * @param {User} user - User who started the game
  * @param {User} opponent - Opponent user (null for vs bot)
- * @returns {Promise<void>}
+ * @returns {Promise<Object>}
  */
 async function startRockPaperScissors(channel, user, opponent = null) {
     try {
@@ -200,7 +256,9 @@ async function startRockPaperScissors(channel, user, opponent = null) {
             players: [{ id: user.id, name: user.username }],
             player1Choice: null,
             player2Choice: null,
-            gameId
+            gameId,
+            channelId: channel.id,
+            messageId: null
         };
 
         activeGames.set(gameId, gameState);
@@ -238,15 +296,23 @@ async function startRockPaperScissors(channel, user, opponent = null) {
             components: [row]
         });
 
+        // Store message ID for later reference
+        gameState.messageId = message.id;
+        activeGames.set(gameId, gameState);
+
         // Set timeout to clean up game
-        setTimeout(() => {
-            if (activeMiniGames.has(gameId)) {
-                activeMiniGames.delete(gameId);
-                interaction.editReply({
-                    content: 'Game timed out!',
-                    components: [],
-                    embeds: []
-                });
+        setTimeout(async () => {
+            if (activeGames.has(gameId)) {
+                activeGames.delete(gameId);
+                try {
+                    await message.edit({
+                        content: 'Game timed out!',
+                        components: [],
+                        embeds: []
+                    });
+                } catch (err) {
+                    // Message might be deleted
+                }
             }
         }, 30000);
         
@@ -651,6 +717,7 @@ async function getLeaderboard(guildId, gameType, limit = 10) {
 }
 
 module.exports = {
+    initialize,
     startTrivia,
     createPoll,
     startRockPaperScissors,

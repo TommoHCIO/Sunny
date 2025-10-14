@@ -91,6 +91,9 @@ client.once('ready', async () => {
     logger.info(`✅ Sunny is online! Logged in as ${client.user.tag}`);
     logger.info(`📊 Serving ${client.guilds.cache.size} server(s)`);
     
+    // Initialize game service with client
+    gameService.initialize(client);
+    
     // Validate bot permissions in all guilds
     const { getMissingCriticalPermissions, canTimeout } = require('./utils/permissions');
     for (const [guildId, guild] of client.guilds.cache) {
