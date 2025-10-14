@@ -399,35 +399,50 @@ async function startTriviaSession(channel, options = {}) {
         // Show final results
         if (sessionScores.size > 0) {
             const sortedScores = Array.from(sessionScores.entries())
-                .sort(([,a], [,b]) => b - a)
-                .slice(0, 10);
+                .sort(([,a], [,b]) => b - a);
             
             const resultsEmbed = new EmbedBuilder()
                 .setColor('#FFD700')
                 .setTitle('🏆 Trivia Session Complete!')
-                .setDescription(`**Final Results - ${questionCount} Questions**`);
+                .setDescription(`**Final Results - ${questionCount} Questions**\n${sortedScores.length} participant${sortedScores.length === 1 ? '' : 's'} competed!`);
             
             // Add winner announcement
             if (sortedScores.length > 0) {
                 const [winnerId, winnerScore] = sortedScores[0];
+                const percentage = Math.round((winnerScore / questionCount) * 100);
                 resultsEmbed.addFields({
                     name: '🎉 Winner!',
-                    value: `<@${winnerId}> with **${winnerScore}/${questionCount}** correct!`,
+                    value: `<@${winnerId}> with **${winnerScore}/${questionCount}** correct (${percentage}%)`,
                     inline: false
                 });
             }
             
-            // Add full leaderboard
+            // Add complete participant leaderboard (all participants)
             const leaderboardText = sortedScores.map(([userId, score], index) => {
                 const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
-                return `${medal} <@${userId}> - **${score}** correct`;
+                const percentage = Math.round((score / questionCount) * 100);
+                return `${medal} <@${userId}> - **${score}/${questionCount}** (${percentage}%)`;
             }).join('\n');
             
             resultsEmbed.addFields({
-                name: '📊 Full Standings',
+                name: '📊 Participant Leaderboard',
                 value: leaderboardText,
                 inline: false
             });
+            
+            // Add session statistics
+            const totalAnswers = sortedScores.reduce((sum, [, score]) => sum + score, 0);
+            const avgScore = (totalAnswers / sortedScores.length).toFixed(1);
+            const avgPercentage = Math.round((avgScore / questionCount) * 100);
+            
+            resultsEmbed.addFields({
+                name: '📈 Session Stats',
+                value: `**Average Score:** ${avgScore}/${questionCount} (${avgPercentage}%)\n**Total Participants:** ${sortedScores.length}`,
+                inline: false
+            });
+            
+            resultsEmbed.setFooter({ text: 'Thanks for playing!' });
+            resultsEmbed.setTimestamp();
             
             // Update user stats
             for (const [userId, score] of sortedScores) {
