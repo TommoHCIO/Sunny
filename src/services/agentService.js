@@ -12,6 +12,7 @@ const discordTools = require('../tools/discordTools');
 const toolExecutor = require('../tools/toolExecutor');
 const { retryWithBackoff } = require('../utils/retry');
 const { anthropicRateLimiter } = require('../utils/rateLimiter');
+const messageComplexity = require('../utils/messageComplexity');
 
 const anthropic = new Anthropic({
     apiKey: process.env.CLAUDE_API_KEY
@@ -117,8 +118,24 @@ async function runAgent(userMessage, conversationContext, author, guild, channel
     // Get channel info
     const channelInfo = channel ? `\nCurrent channel: #${channel.name} (ID: ${channel.id}, Category: ${channel.parent?.name || 'None'})` : '';
 
+    // Analyze message complexity for response length guidance
+    const complexitySummary = messageComplexity.getComplexitySummary(userMessage, false);
+    console.log(`📊 Message complexity analysis:`, complexitySummary);
+
+    // Build complexity hint for Claude
+    const complexityHint = `
+<message_analysis>
+User message complexity: ${complexitySummary.complexity}
+Response guideline: ${complexitySummary.guidelines}
+Maximum sentences recommended: ${complexitySummary.maxSentences}
+${complexitySummary.isListRequest ? 'Note: User is requesting a list - provide complete information but stay concise.' : ''}
+</message_analysis>
+
+IMPORTANT: Follow the response guideline above for appropriate length. Match the response depth to what the user needs.`;
+
     // Build initial user message with context
     const initialMessage = `${conversationContext}
+${complexityHint}
 
 Current date: ${currentDate}
 Current user: ${author.username} (ID: ${author.id})${ownerStatus}${channelInfo}
