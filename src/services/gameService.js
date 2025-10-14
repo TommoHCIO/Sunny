@@ -15,6 +15,7 @@ const {
 // Removed discord-trivia dependency - using custom implementation
 const UserMemory = require('../models/UserMemory');
 const Anthropic = require('@anthropic-ai/sdk');
+const { getRandomQuestion, getRandomQuestions } = require('../data/triviaQuestions');
 
 // Initialize Anthropic client for generating trivia questions
 const anthropic = new Anthropic({
@@ -43,12 +44,30 @@ function initialize(client) {
 }
 
 /**
- * Generate a trivia question using AI
+ * Generate a trivia question using AI or question bank
  * @param {string} category - Category for the question
  * @param {string} difficulty - Difficulty level (easy, medium, hard)
+ * @param {boolean} useAI - Whether to use AI generation (default: false, uses question bank)
  * @returns {Promise<Object>} Generated trivia question
  */
-async function generateTriviaQuestion(category = 'general', difficulty = 'medium') {
+async function generateTriviaQuestion(category = 'general', difficulty = 'medium', useAI = false) {
+    // If not using AI, try to get from question bank first
+    if (!useAI) {
+        try {
+            const question = getRandomQuestion(difficulty, category);
+            if (question) {
+                console.log(`[GameService] Using question from bank: ${difficulty}/${category}`);
+                return question;
+            }
+            // If no question found in bank, fall through to AI generation
+            console.log(`[GameService] No question found in bank for ${difficulty}/${category}, using AI`);
+        } catch (error) {
+            console.error('[GameService] Error getting question from bank:', error);
+            // Fall through to AI generation
+        }
+    }
+    
+    // AI generation (original code)
     try {
         // Map categories to more specific topics for better questions
         const categoryPrompts = {
