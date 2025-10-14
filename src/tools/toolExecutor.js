@@ -545,10 +545,10 @@ async function execute(toolName, input, guild, author) {
                 return await createQuickPoll(guild, input);
 
             case 'start_rps':
-                return await startRockPaperScissors(guild, input);
+                return await startRockPaperScissors(guild, input, author);
 
             case 'start_number_guess':
-                return await startNumberGuess(guild, input);
+                return await startNumberGuess(guild, input, author);
 
             case 'roll_dice':
                 return await rollDice(guild, input);
@@ -2388,7 +2388,7 @@ async function createQuickPoll(guild, input) {
     }
 }
 
-async function startRockPaperScissors(guild, input) {
+async function startRockPaperScissors(guild, input, author) {
     try {
         const channel = findChannel(guild, input.channelName);
         if (!channel) {
@@ -2404,8 +2404,8 @@ async function startRockPaperScissors(guild, input) {
             if (member) opponent = member.user;
         }
 
-        // Get the user who initiated the game (we'll use the bot owner as default)
-        const initiator = guild.members.cache.get(guild.ownerId).user;
+        // Use the actual message author if available, otherwise use guild owner
+        const initiator = author || guild.members.cache.get(guild.ownerId).user;
 
         const result = await gameService.startRockPaperScissors(channel, initiator, opponent);
 
@@ -2415,14 +2415,14 @@ async function startRockPaperScissors(guild, input) {
     }
 }
 
-async function startNumberGuess(guild, input) {
+async function startNumberGuess(guild, input, author) {
     try {
         const channel = findChannel(guild, input.channelName);
         if (!channel) {
             return { success: false, error: `Channel "${input.channelName}" not found` };
         }
 
-        const user = guild.members.cache.get(guild.ownerId).user;
+        const user = author || guild.members.cache.get(guild.ownerId).user;
 
         const result = await gameService.startNumberGuessing(channel, user, {
             min: input.min,
