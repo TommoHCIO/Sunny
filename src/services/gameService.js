@@ -14,6 +14,12 @@ const {
 } = require('discord.js');
 // Removed discord-trivia dependency - using custom implementation
 const UserMemory = require('../models/UserMemory');
+const Anthropic = require('@anthropic-ai/sdk');
+
+// Initialize Anthropic client for generating trivia questions
+const anthropic = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY
+});
 
 // Store Discord client instance (will be set on initialization)
 let discordClient = null;
@@ -37,12 +43,119 @@ function initialize(client) {
 }
 
 /**
+ * Generate a trivia question using AI
+ * @param {string} category - Category for the question
+ * @param {string} difficulty - Difficulty level (easy, medium, hard)
+ * @returns {Promise<Object>} Generated trivia question
+ */
+async function generateTriviaQuestion(category = 'general', difficulty = 'medium') {
+    try {
+        // Map categories to more specific topics for better questions
+        const categoryPrompts = {
+            'general': 'general knowledge',
+            'science': 'science (physics, chemistry, biology, astronomy)',
+            'history': 'world history',
+            'geography': 'world geography',
+            'entertainment': 'movies, TV shows, music, and entertainment',
+            'sports': 'sports and athletics',
+            'art': 'art, artists, and art history',
+            'animals': 'animals and wildlife',
+            'vehicles': 'cars, planes, trains, and vehicles',
+            'comics': 'comic books and superheroes',
+            'gadgets': 'technology and gadgets',
+            'anime': 'anime and manga',
+            'cartoons': 'cartoons and animation'
+        };
+
+        const prompt = `Generate a ${difficulty} trivia question about ${categoryPrompts[category] || category}.
+
+Return ONLY a JSON object in this exact format (no markdown, no extra text):
+{
+  "question": "The trivia question here",
+  "answers": ["Answer A", "Answer B", "Answer C", "Answer D"],
+  "correct": 0,
+  "category": "${category}",
+  "explanation": "Brief explanation of why this is the correct answer"
+}
+
+Rules:
+- The question should be appropriate for all ages
+- Make exactly 4 answer options
+- The correct answer index (0-3) should be randomized
+- Answers should be plausible but only one correct
+- ${difficulty === 'easy' ? 'Make the question straightforward and common knowledge' : difficulty === 'hard' ? 'Make the question challenging but fair, requiring deeper knowledge' : 'Make the question moderately challenging'}
+- The question should be factual and verifiable
+- Don't use "all of the above" or "none of the above" as options`;
+
+        const response = await anthropic.messages.create({
+            model: 'claude-3-haiku-20240307',
+            max_tokens: 500,
+            temperature: 0.8,
+            messages: [{
+                role: 'user',
+                content: prompt
+            }]
+        });
+
+        // Parse the response
+        const content = response.content[0].text;
+        
+        // Try to extract JSON from the response
+        let triviaData;
+        try {
+            // Remove any markdown code blocks if present
+            const jsonStr = content.replace(/```json\n?|```\n?/g, '').trim();
+            triviaData = JSON.parse(jsonStr);
+        } catch (parseError) {
+            console.error('Failed to parse AI response:', content);
+            throw new Error('Failed to generate valid trivia question');
+        }
+
+        // Validate the response has required fields
+        if (!triviaData.question || !Array.isArray(triviaData.answers) || 
+            triviaData.answers.length !== 4 || typeof triviaData.correct !== 'number') {
+            throw new Error('Invalid trivia question format from AI');
+        }
+
+        return triviaData;
+    } catch (error) {
+        console.error('Error generating trivia question:', error);
+        
+        // Fallback to a default question if generation fails
+        const fallbackQuestions = [
+            {
+                question: "What is the capital of France?",
+                answers: ["Paris", "London", "Berlin", "Madrid"],
+                correct: 0,
+                category: category,
+                explanation: "Paris is the capital and largest city of France."
+            },
+            {
+                question: "What is 2 + 2?",
+                answers: ["3", "4", "5", "6"],
+                correct: 1,
+                category: category,
+                explanation: "2 + 2 equals 4."
+            }
+        ];
+        
+        return fallbackQuestions[Math.floor(Math.random() * fallbackQuestions.length)];
+    }
+}
+
+/**
  * Start a trivia game in a channel
  * @param {TextChannel} channel - Discord channel to start game in
  * @param {Object} options - Game options
  * @returns {Promise<Object>} Game result
  */
 async function startTrivia(channel, options = {}) {
+    // Support multi-question sessions
+    const questionCount = Math.min(options.questionCount || 1, 10); // Max 10 questions
+    
+    if (questionCount > 1) {
+        return startTriviaSession(channel, options);
+    }
     try {
         // Check if a game is already active in this channel
         if (activeGames.has(channel.id)) {
@@ -52,58 +165,28 @@ async function startTrivia(channel, options = {}) {
             };
         }
 
-        // For now, let's create a simple trivia implementation
-        // Since discord-trivia package requires specific Discord.js objects
-        // We'll use a basic trivia system instead
-        
-        const triviaQuestions = [
-            {
-                question: "What is the capital of France?",
-                answers: ["Paris", "London", "Berlin", "Madrid"],
-                correct: 0,
-                category: "geography"
-            },
-            {
-                question: "What year did World War II end?",
-                answers: ["1943", "1944", "1945", "1946"],
-                correct: 2,
-                category: "history"
-            },
-            {
-                question: "What is the largest planet in our solar system?",
-                answers: ["Earth", "Mars", "Jupiter", "Saturn"],
-                correct: 2,
-                category: "science"
-            },
-            {
-                question: "Who painted the Mona Lisa?",
-                answers: ["Michelangelo", "Leonardo da Vinci", "Raphael", "Donatello"],
-                correct: 1,
-                category: "general"
-            },
-            {
-                question: "What is the chemical symbol for gold?",
-                answers: ["Go", "Gd", "Au", "Ag"],
-                correct: 2,
-                category: "science"
-            }
-        ];
-
-        // Filter questions by category if specified
+        // Generate a dynamic trivia question using AI
         const category = options.category || 'general';
-        const filteredQuestions = category === 'general' 
-            ? triviaQuestions 
-            : triviaQuestions.filter(q => q.category === category.toLowerCase());
-
-        if (filteredQuestions.length === 0) {
-            return {
-                success: false,
-                error: `No questions available for category: ${category}`
-            };
+        const difficulty = options.difficulty || 'medium';
+        
+        // Show a "generating" message while we create the question
+        const generatingEmbed = new EmbedBuilder()
+            .setColor('#FFA500')
+            .setTitle('🤔 Generating Trivia Question...')
+            .setDescription(`Creating a ${difficulty} ${category} question just for you!`)
+            .setFooter({ text: 'This will just take a moment...' });
+        
+        const generatingMsg = await channel.send({ embeds: [generatingEmbed] });
+        
+        // Generate the question
+        const question = await generateTriviaQuestion(category, difficulty);
+        
+        // Delete the generating message
+        try {
+            await generatingMsg.delete();
+        } catch (err) {
+            // Message might already be deleted
         }
-
-        // Select a random question
-        const question = filteredQuestions[Math.floor(Math.random() * filteredQuestions.length)];
 
         // Create unique game ID
         const gameId = `trivia_${channel.id}_${Date.now()}`;
@@ -183,6 +266,11 @@ async function startTrivia(channel, options = {}) {
                 // Build results message
                 let resultDescription = `The correct answer was: **${correctLetter}. ${correctAnswer}**\n\n`;
                 
+                // Add explanation if available
+                if (question.explanation) {
+                    resultDescription += `💡 **Explanation:** ${question.explanation}\n\n`;
+                }
+                
                 if (game.participants.size > 0) {
                     const correctUsers = [];
                     const incorrectUsers = [];
@@ -231,6 +319,210 @@ async function startTrivia(channel, options = {}) {
     } catch (error) {
         activeGames.delete(channel.id);
         console.error('Error starting trivia:', error);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
+/**
+ * Start a multi-question trivia session
+ * @param {TextChannel} channel - Discord channel
+ * @param {Object} options - Game options
+ * @returns {Promise<Object>} Session result
+ */
+async function startTriviaSession(channel, options = {}) {
+    try {
+        // Check if a game is already active
+        if (activeGames.has(channel.id)) {
+            return {
+                success: false,
+                error: 'A game is already in progress in this channel!'
+            };
+        }
+
+        const questionCount = Math.min(options.questionCount || 5, 10);
+        const category = options.category || 'general';
+        const difficulty = options.difficulty || 'medium';
+        const sessionScores = new Map(); // Track scores across questions
+        
+        // Announce the session
+        const startEmbed = new EmbedBuilder()
+            .setColor('#00FF00')
+            .setTitle('🎮 Trivia Session Starting!')
+            .setDescription(`Get ready for ${questionCount} questions!`)
+            .addFields(
+                { name: 'Category', value: category, inline: true },
+                { name: 'Difficulty', value: difficulty, inline: true },
+                { name: 'Questions', value: questionCount.toString(), inline: true }
+            )
+            .setFooter({ text: 'First question coming up in 5 seconds...' });
+        
+        await channel.send({ embeds: [startEmbed] });
+        
+        // Mark channel as having active game
+        activeGames.set(channel.id, { type: 'trivia_session' });
+        
+        // Wait before starting
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        
+        // Run through questions
+        for (let i = 0; i < questionCount; i++) {
+            // Check if session was cancelled
+            if (!activeGames.has(channel.id)) break;
+            
+            // Show question number
+            if (i > 0) {
+                await channel.send(`**Question ${i + 1} of ${questionCount} coming up...**`);
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+            
+            // Generate and show question
+            const question = await generateTriviaQuestion(category, difficulty);
+            const gameId = `trivia_${channel.id}_${Date.now()}`;
+            
+            // Create embed with question
+            const embed = new EmbedBuilder()
+                .setColor('#00CED1')
+                .setTitle(`🧠 Question ${i + 1}/${questionCount}`)
+                .setDescription(question.question)
+                .addFields(
+                    question.answers.map((answer, index) => ({
+                        name: `${['A', 'B', 'C', 'D'][index]}`,
+                        value: answer,
+                        inline: true
+                    }))
+                )
+                .setFooter({ text: `Category: ${question.category} | 20 seconds to answer!` });
+
+            // Create answer buttons
+            const row = new ActionRowBuilder()
+                .addComponents(
+                    ['A', 'B', 'C', 'D'].map(letter => 
+                        new ButtonBuilder()
+                            .setCustomId(`trivia_${letter}_${gameId}`)
+                            .setLabel(letter)
+                            .setStyle(ButtonStyle.Primary)
+                    )
+                );
+
+            const triviaMessage = await channel.send({ embeds: [embed], components: [row] });
+            
+            // Store game state
+            const gameState = {
+                type: 'trivia',
+                channelId: channel.id,
+                question: question,
+                messageId: triviaMessage.id,
+                startTime: Date.now(),
+                participants: new Map(),
+                ended: false
+            };
+            activeGames.set(gameId, gameState);
+            
+            // Wait for answers (20 seconds per question)
+            await new Promise(resolve => {
+                setTimeout(async () => {
+                    gameState.ended = true;
+                    
+                    // Disable buttons
+                    const disabledRow = new ActionRowBuilder()
+                        .addComponents(
+                            row.components.map(button => 
+                                ButtonBuilder.from(button).setDisabled(true)
+                            )
+                        );
+                    
+                    try {
+                        await triviaMessage.edit({ components: [disabledRow] });
+                    } catch (err) {}
+                    
+                    // Show results
+                    const correctLetter = ['A', 'B', 'C', 'D'][question.correct];
+                    const correctAnswer = question.answers[question.correct];
+                    
+                    let resultMsg = `✅ **Answer:** ${correctLetter}. ${correctAnswer}`;
+                    if (question.explanation) {
+                        resultMsg += `\n💡 ${question.explanation}`;
+                    }
+                    
+                    // Update session scores
+                    for (const [userId, answer] of gameState.participants) {
+                        if (answer === question.correct) {
+                            sessionScores.set(userId, (sessionScores.get(userId) || 0) + 1);
+                        }
+                    }
+                    
+                    // Show who got it right
+                    const correctUsers = [];
+                    for (const [userId, answer] of gameState.participants) {
+                        if (answer === question.correct) {
+                            correctUsers.push(`<@${userId}>`);
+                        }
+                    }
+                    
+                    if (correctUsers.length > 0) {
+                        resultMsg += `\n**Got it right:** ${correctUsers.join(', ')}`;
+                    } else if (gameState.participants.size > 0) {
+                        resultMsg += `\n**Nobody got this one!**`;
+                    } else {
+                        resultMsg += `\n**Nobody answered!**`;
+                    }
+                    
+                    await channel.send(resultMsg);
+                    
+                    // Clean up this game
+                    activeGames.delete(gameId);
+                    
+                    resolve();
+                }, 20000);
+            });
+            
+            // Wait between questions
+            if (i < questionCount - 1) {
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+        }
+        
+        // Show final results
+        if (sessionScores.size > 0) {
+            const sortedScores = Array.from(sessionScores.entries())
+                .sort(([,a], [,b]) => b - a)
+                .slice(0, 10);
+            
+            const resultsEmbed = new EmbedBuilder()
+                .setColor('#FFD700')
+                .setTitle('🏆 Trivia Session Complete!')
+                .setDescription('Great game everyone! Here are the final scores:');
+            
+            sortedScores.forEach(([userId, score], index) => {
+                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🏅';
+                resultsEmbed.addFields({
+                    name: `${medal} Place ${index + 1}`,
+                    value: `<@${userId}> - **${score}/${questionCount}** correct`,
+                    inline: true
+                });
+                
+                // Update user stats
+                updateGameStats(userId, channel.guild.id, 'trivia', score);
+            });
+            
+            await channel.send({ embeds: [resultsEmbed] });
+        } else {
+            await channel.send('📊 **Trivia session complete!** Nobody participated in this session.');
+        }
+        
+        // Clean up
+        activeGames.delete(channel.id);
+        
+        return {
+            success: true,
+            message: `Completed trivia session with ${questionCount} questions`
+        };
+    } catch (error) {
+        activeGames.delete(channel.id);
+        console.error('Error in trivia session:', error);
         return {
             success: false,
             error: error.message
