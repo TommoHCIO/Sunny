@@ -95,8 +95,16 @@ ${complexitySummary.isListRequest ? 'Note: User is requesting a list - provide c
 
 IMPORTANT: Follow the response guideline above for appropriate length. Match the response depth to what the user needs.`;
 
+    // Get current model info
+    const currentModel = process.env.ZAI_MODEL || 'glm-4.5-air';
+    const modelInfo = `
+
+## YOUR CURRENT AI MODEL
+You are currently powered by **Z.AI ${currentModel.toUpperCase()}** (via Z.AI's API platform). When users ask what model you're running, tell them you're using "Z.AI ${currentModel.toUpperCase()}" or "Z.AI GLM-4.5-Air", NOT Claude or any other model. This is a cost-optimized deployment that offers excellent performance with 90.6% tool-calling success rate and fast response times.`;
+
     // Build system message (OpenAI format)
     const systemMessage = `${personality}
+${modelInfo}
 
 ${complexityHint}
 
