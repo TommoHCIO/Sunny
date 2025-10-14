@@ -15,6 +15,7 @@
  * - serverTools: Server settings, invites, webhooks, automod
  * - autoMessageTools: Automatic message management (welcome, goodbye, scheduled, etc.)
  * - ticketTools: Thread-based ticketing system with transcripts
+ * - gameTools: Interactive games, trivia, polls, and entertainment features
  */
 
 const { getInspectionTools } = require('./categories/inspectionTools');
@@ -28,6 +29,7 @@ const { getEmojiStickerTools } = require('./categories/emojiStickerTools');
 const { getServerTools } = require('./categories/serverTools');
 const { getAutoMessageTools } = require('./categories/autoMessageTools');
 const { getTicketTools } = require('./categories/ticketTools');
+const { getGameTools } = require('./categories/gameTools');
 
 /**
  * Get all Discord tools available to Claude
@@ -46,7 +48,8 @@ function getDiscordTools(guild) {
         ...getEmojiStickerTools(guild),
         ...getServerTools(guild),
         ...getAutoMessageTools(guild),
-        ...getTicketTools(guild)
+        ...getTicketTools(guild),
+        ...getGameTools(guild)
     ];
 }
 

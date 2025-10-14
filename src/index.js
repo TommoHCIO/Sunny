@@ -62,6 +62,7 @@ const moderationService = require('./services/moderationService');
 const databaseService = require('./services/database/databaseService');
 const autoMessageService = require('./services/autoMessageService');
 const ticketService = require('./services/ticketService');
+const gameService = require('./services/gameService');
 
 // Connect to MongoDB (async function to await connection)
 let mongoConnected = false;
@@ -502,6 +503,68 @@ client.on('interactionCreate', async (interaction) => {
                     await interaction.editReply(`❌ Failed to view tickets: ${error.message}`);
                 }
             }
+        }
+        
+        // Handle game interaction buttons
+        if (customId.startsWith('rps_')) {
+            // Rock Paper Scissors game
+            const parts = customId.split('_');
+            const choice = parts[1]; // rock, paper, or scissors
+            const gameId = parts[2]; // game ID
+            
+            const game = gameService.activeGames.get(gameId);
+            if (!game || game.type !== 'rps') {
+                await interaction.reply({ content: '❌ Game has expired or not found.', ephemeral: true });
+                return;
+            }
+            
+            if (game.players[0].id !== interaction.user.id) {
+                await interaction.reply({ content: '❌ This is not your game!', ephemeral: true });
+                return;
+            }
+            
+            // Process the choice
+            await gameService.processRPSChoice(interaction, gameId, choice);
+        }
+        
+        if (customId.startsWith('poll_')) {
+            // Quick poll buttons
+            const parts = customId.split('_');
+            const vote = parts[1]; // yes, no, or maybe
+            const pollId = parts[2]; // poll ID
+            
+            const poll = gameService.activePolls.get(pollId);
+            if (!poll) {
+                await interaction.reply({ content: '❌ Poll has expired or not found.', ephemeral: true });
+                return;
+            }
+            
+            // Check if user already voted
+            const existingVote = Object.entries(poll.votes).find(([option, voters]) => 
+                voters.includes(interaction.user.id)
+            );
+            
+            if (existingVote) {
+                // Remove from old vote
+                const oldOption = existingVote[0];
+                poll.votes[oldOption] = poll.votes[oldOption].filter(id => id !== interaction.user.id);
+            }
+            
+            // Add new vote
+            poll.votes[vote].push(interaction.user.id);
+            
+            // Update the poll message
+            const { EmbedBuilder } = require('discord.js');
+            const embed = interaction.message.embeds[0];
+            const updatedEmbed = EmbedBuilder.from(embed)
+                .setFields(
+                    { name: '✅ Yes', value: `${poll.votes.yes.length} vote(s)`, inline: true },
+                    { name: '❌ No', value: `${poll.votes.no.length} vote(s)`, inline: true },
+                    { name: '🤷 Maybe', value: `${poll.votes.maybe.length} vote(s)`, inline: true }
+                )
+                .setFooter({ text: `Poll ID: ${pollId} • ${poll.votes.yes.length + poll.votes.no.length + poll.votes.maybe.length} total votes` });
+            
+            await interaction.update({ embeds: [updatedEmbed] });
         }
         
         // Handle ticket management buttons (on existing tickets)

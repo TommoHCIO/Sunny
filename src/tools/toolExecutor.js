@@ -17,6 +17,7 @@ const roleManagement = require('./roleManagement');
 const channelMemberTools = require('./channelMemberTools');
 const autoMessageService = require('../services/autoMessageService');
 const ticketService = require('../services/ticketService');
+const gameService = require('../services/gameService');
 const ServerSettings = require('../models/ServerSettings');
 
 // Initialize action handler (singleton pattern)
@@ -529,6 +530,43 @@ async function execute(toolName, input, guild, author) {
 
             case 'configure_ticket_categories':
                 return await configureTicketCategories(guild, input);
+
+            // ===== GAME AND ENTERTAINMENT TOOLS =====
+            case 'start_trivia':
+                return await startTrivia(guild, input);
+
+            case 'get_trivia_leaderboard':
+                return await getTriviaLeaderboard(guild, input);
+
+            case 'create_poll':
+                return await createPoll(guild, input);
+
+            case 'create_quick_poll':
+                return await createQuickPoll(guild, input);
+
+            case 'start_rps':
+                return await startRockPaperScissors(guild, input);
+
+            case 'start_number_guess':
+                return await startNumberGuess(guild, input);
+
+            case 'roll_dice':
+                return await rollDice(guild, input);
+
+            case 'flip_coin':
+                return await flipCoin(guild, input);
+
+            case 'magic_8ball':
+                return await magic8Ball(guild, input);
+
+            case 'get_random_fact':
+                return await getRandomFact(guild, input);
+
+            case 'get_game_leaderboard':
+                return await getGameLeaderboard(guild, input);
+
+            case 'get_user_game_stats':
+                return await getUserGameStats(guild, input);
 
             default:
                 console.error(`❌ Unknown tool: ${toolName}`);
@@ -2241,6 +2279,421 @@ async function configureTicketCategories(guild, input) {
         };
     } catch (error) {
         return { success: false, error: `Failed to configure ticket categories: ${error.message}` };
+    }
+}
+
+// ===== GAME AND ENTERTAINMENT IMPLEMENTATIONS =====
+
+async function startTrivia(guild, input) {
+    try {
+        const channel = findChannel(guild, input.channelName);
+        if (!channel) {
+            return { success: false, error: `Channel "${input.channelName}" not found` };
+        }
+
+        const result = await gameService.startTrivia(channel, {
+            category: input.category,
+            difficulty: input.difficulty,
+            questionCount: input.questionCount
+        });
+
+        return result;
+    } catch (error) {
+        return { success: false, error: `Failed to start trivia: ${error.message}` };
+    }
+}
+
+async function getTriviaLeaderboard(guild, input) {
+    try {
+        const leaderboard = await gameService.getLeaderboard(guild.id, 'trivia', input.limit || 10);
+
+        return {
+            success: true,
+            leaderboard: leaderboard,
+            total: leaderboard.length
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to get trivia leaderboard: ${error.message}` };
+    }
+}
+
+async function createPoll(guild, input) {
+    try {
+        const channel = findChannel(guild, input.channelName);
+        if (!channel) {
+            return { success: false, error: `Channel "${input.channelName}" not found` };
+        }
+
+        const pollData = await gameService.createPoll(input);
+        if (!pollData.success) {
+            return pollData;
+        }
+
+        // Send poll to channel
+        const message = await channel.send({ poll: pollData.poll });
+
+        return {
+            success: true,
+            message: `Created poll in #${channel.name}`,
+            message_id: message.id
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to create poll: ${error.message}` };
+    }
+}
+
+async function createQuickPoll(guild, input) {
+    try {
+        const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+        const channel = findChannel(guild, input.channelName);
+
+        if (!channel) {
+            return { success: false, error: `Channel "${input.channelName}" not found` };
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor('#00BFFF')
+            .setTitle('📊 Quick Poll')
+            .setDescription(input.question)
+            .setFooter({ text: 'Click a button to vote!' });
+
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('poll_yes')
+                    .setLabel('Yes')
+                    .setEmoji('✅')
+                    .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setCustomId('poll_no')
+                    .setLabel('No')
+                    .setEmoji('❌')
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId('poll_maybe')
+                    .setLabel('Maybe')
+                    .setEmoji('🤔')
+                    .setStyle(ButtonStyle.Secondary)
+            );
+
+        const message = await channel.send({ embeds: [embed], components: [row] });
+
+        return {
+            success: true,
+            message: `Created quick poll in #${channel.name}`,
+            message_id: message.id
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to create quick poll: ${error.message}` };
+    }
+}
+
+async function startRockPaperScissors(guild, input) {
+    try {
+        const channel = findChannel(guild, input.channelName);
+        if (!channel) {
+            return { success: false, error: `Channel "${input.channelName}" not found` };
+        }
+
+        let opponent = null;
+        if (input.opponent) {
+            opponent = guild.members.cache.find(m =>
+                m.user.username.toLowerCase() === input.opponent.toLowerCase() ||
+                m.displayName.toLowerCase() === input.opponent.toLowerCase()
+            );
+        }
+
+        // Create a fake interaction object for the game
+        const fakeInteraction = {
+            user: guild.members.cache.get(guild.ownerId).user,
+            guild: guild,
+            channel: channel,
+            reply: async (options) => channel.send(options),
+            editReply: async (options) => null,
+            message: { edit: async (options) => null }
+        };
+
+        await gameService.startRockPaperScissors(fakeInteraction, opponent?.user || null);
+
+        return {
+            success: true,
+            message: `Started Rock Paper Scissors game in #${channel.name}`
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to start Rock Paper Scissors: ${error.message}` };
+    }
+}
+
+async function startNumberGuess(guild, input) {
+    try {
+        const channel = findChannel(guild, input.channelName);
+        if (!channel) {
+            return { success: false, error: `Channel "${input.channelName}" not found` };
+        }
+
+        const user = guild.members.cache.get(guild.ownerId).user;
+
+        const result = await gameService.startNumberGuessing(channel, user, {
+            min: input.min,
+            max: input.max,
+            maxGuesses: input.maxGuesses
+        });
+
+        return result;
+    } catch (error) {
+        return { success: false, error: `Failed to start number guessing: ${error.message}` };
+    }
+}
+
+async function rollDice(guild, input) {
+    try {
+        const { EmbedBuilder } = require('discord.js');
+        const channel = findChannel(guild, input.channelName);
+
+        if (!channel) {
+            return { success: false, error: `Channel "${input.channelName}" not found` };
+        }
+
+        const sides = input.sides || 6;
+        const count = input.count || 1;
+        const rolls = [];
+        let total = 0;
+
+        for (let i = 0; i < count; i++) {
+            const roll = Math.floor(Math.random() * sides) + 1;
+            rolls.push(roll);
+            total += roll;
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor('#FF69B4')
+            .setTitle('🎲 Dice Roll!')
+            .setDescription(`Rolling ${count}d${sides}...`)
+            .addFields(
+                { name: 'Rolls', value: rolls.join(', '), inline: true },
+                { name: 'Total', value: `**${total}**`, inline: true }
+            );
+
+        await channel.send({ embeds: [embed] });
+
+        return {
+            success: true,
+            message: `Rolled ${count}d${sides} in #${channel.name}: ${rolls.join(', ')} (Total: ${total})`
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to roll dice: ${error.message}` };
+    }
+}
+
+async function flipCoin(guild, input) {
+    try {
+        const { EmbedBuilder } = require('discord.js');
+        const channel = findChannel(guild, input.channelName);
+
+        if (!channel) {
+            return { success: false, error: `Channel "${input.channelName}" not found` };
+        }
+
+        const result = Math.random() < 0.5 ? 'Heads' : 'Tails';
+        const emoji = result === 'Heads' ? '🪙' : '🔄';
+
+        const embed = new EmbedBuilder()
+            .setColor('#FFD700')
+            .setTitle(`${emoji} Coin Flip!`)
+            .setDescription(`The coin landed on **${result}**!`);
+
+        await channel.send({ embeds: [embed] });
+
+        return {
+            success: true,
+            message: `Flipped coin in #${channel.name}: ${result}`
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to flip coin: ${error.message}` };
+    }
+}
+
+async function magic8Ball(guild, input) {
+    try {
+        const { EmbedBuilder } = require('discord.js');
+        const channel = findChannel(guild, input.channelName);
+
+        if (!channel) {
+            return { success: false, error: `Channel "${input.channelName}" not found` };
+        }
+
+        const responses = [
+            'It is certain.',
+            'It is decidedly so.',
+            'Without a doubt.',
+            'Yes definitely.',
+            'You may rely on it.',
+            'As I see it, yes.',
+            'Most likely.',
+            'Outlook good.',
+            'Yes.',
+            'Signs point to yes.',
+            'Reply hazy, try again.',
+            'Ask again later.',
+            'Better not tell you now.',
+            'Cannot predict now.',
+            'Concentrate and ask again.',
+            "Don't count on it.",
+            'My reply is no.',
+            'My sources say no.',
+            'Outlook not so good.',
+            'Very doubtful.'
+        ];
+
+        const response = responses[Math.floor(Math.random() * responses.length)];
+
+        const embed = new EmbedBuilder()
+            .setColor('#8B008B')
+            .setTitle('🔮 Magic 8-Ball')
+            .addFields(
+                { name: 'Question', value: input.question },
+                { name: 'Answer', value: `**${response}**` }
+            );
+
+        await channel.send({ embeds: [embed] });
+
+        return {
+            success: true,
+            message: `Magic 8-ball answered in #${channel.name}: ${response}`
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to use magic 8-ball: ${error.message}` };
+    }
+}
+
+async function getRandomFact(guild, input) {
+    try {
+        const { EmbedBuilder } = require('discord.js');
+        const channel = findChannel(guild, input.channelName);
+
+        if (!channel) {
+            return { success: false, error: `Channel "${input.channelName}" not found` };
+        }
+
+        const facts = {
+            general: [
+                'Honey never spoils. Archaeologists have found pots of honey in ancient Egyptian tombs that are over 3,000 years old!',
+                'Octopuses have three hearts and blue blood.',
+                'Bananas are berries, but strawberries are not.',
+                'The shortest war in history lasted 38-45 minutes.',
+                'A group of flamingos is called a "flamboyance".'
+            ],
+            science: [
+                'Water can exist in three states at once (triple point).',
+                'Diamond is not the hardest natural material anymore - wurtzite boron nitride is harder.',
+                'One teaspoon of a neutron star would weigh about 6 billion tons.',
+                'Glass is neither liquid nor solid, but an amorphous solid.',
+                'The human brain uses about 20% of the body\'s energy despite being only 2% of body weight.'
+            ],
+            history: [
+                'Oxford University is older than the Aztec Empire.',
+                'Cleopatra lived closer to the moon landing than to the construction of the pyramids.',
+                'The Great Wall of China is not visible from space without aid.',
+                'Vikings never wore horned helmets.',
+                'Napoleon was actually average height for his time.'
+            ],
+            space: [
+                'A day on Venus is longer than its year.',
+                'Saturn\'s moon Titan has rivers and lakes of liquid methane.',
+                'There are more stars in the universe than grains of sand on Earth.',
+                'The footprints on the moon will last for millions of years.',
+                'Jupiter\'s Great Red Spot is shrinking.'
+            ],
+            animals: [
+                'Dolphins have names for each other.',
+                'Crows can hold grudges and recognize human faces.',
+                'Sea otters hold hands while sleeping to keep from drifting apart.',
+                'Penguins propose to their mates with pebbles.',
+                'Elephants are afraid of bees.'
+            ],
+            food: [
+                'Peanuts are not nuts, they\'re legumes.',
+                'Carrots were originally purple.',
+                'Vanilla is the second most expensive spice after saffron.',
+                'Apples float in water because they are 25% air.',
+                'Chocolate was once used as currency.'
+            ]
+        };
+
+        const category = input.category || 'general';
+        const categoryFacts = facts[category] || facts.general;
+        const fact = categoryFacts[Math.floor(Math.random() * categoryFacts.length)];
+
+        const embed = new EmbedBuilder()
+            .setColor('#00CED1')
+            .setTitle('💡 Random Fact')
+            .setDescription(fact)
+            .setFooter({ text: `Category: ${category}` });
+
+        await channel.send({ embeds: [embed] });
+
+        return {
+            success: true,
+            message: `Shared a ${category} fact in #${channel.name}`
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to get random fact: ${error.message}` };
+    }
+}
+
+async function getGameLeaderboard(guild, input) {
+    try {
+        const gameType = input.gameType === 'all' ? null : input.gameType;
+        const leaderboard = await gameService.getLeaderboard(guild.id, gameType, input.limit || 10);
+
+        return {
+            success: true,
+            leaderboard: leaderboard,
+            total: leaderboard.length,
+            game_type: input.gameType
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to get game leaderboard: ${error.message}` };
+    }
+}
+
+async function getUserGameStats(guild, input) {
+    try {
+        const user = guild.members.cache.find(m =>
+            m.user.username.toLowerCase() === input.username.toLowerCase() ||
+            m.displayName.toLowerCase() === input.username.toLowerCase()
+        );
+
+        if (!user) {
+            return { success: false, error: `User "${input.username}" not found` };
+        }
+
+        const UserMemory = require('../models/UserMemory');
+        const stats = await UserMemory.findOne({ userId: user.id, guildId: guild.id });
+
+        if (!stats || !stats.games) {
+            return {
+                success: true,
+                stats: {
+                    username: user.user.username,
+                    total_plays: 0,
+                    message: 'No game stats found for this user'
+                }
+            };
+        }
+
+        return {
+            success: true,
+            stats: {
+                username: user.user.username,
+                total_plays: stats.games.totalPlays || 0,
+                trivia: stats.games.trivia || { plays: 0, totalScore: 0, highScore: 0 },
+                rps: stats.games.rps || { plays: 0, totalScore: 0 },
+                number_guess: stats.games.number_guess || { plays: 0, totalScore: 0 }
+            }
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to get user game stats: ${error.message}` };
     }
 }
 
