@@ -2404,8 +2404,30 @@ async function startRockPaperScissors(guild, input, author) {
             if (member) opponent = member.user;
         }
 
-        // Use the actual message author if available, otherwise use guild owner
-        const initiator = author || guild.members.cache.get(guild.ownerId).user;
+        // Use the actual message author if available, otherwise create fallback
+        let initiator = author;
+        if (!initiator) {
+            try {
+                const ownerMember = guild.members.cache.get(guild.ownerId);
+                if (ownerMember && ownerMember.user) {
+                    initiator = ownerMember.user;
+                } else {
+                    // Create a basic user object as fallback
+                    initiator = { 
+                        id: guild.ownerId || 'unknown', 
+                        username: 'Player',
+                        displayName: 'Player'
+                    };
+                }
+            } catch (err) {
+                console.log('Failed to get guild owner, using fallback:', err.message);
+                initiator = { 
+                    id: 'unknown', 
+                    username: 'Player',
+                    displayName: 'Player'
+                };
+            }
+        }
 
         const result = await gameService.startRockPaperScissors(channel, initiator, opponent);
 
@@ -2422,7 +2444,30 @@ async function startNumberGuess(guild, input, author) {
             return { success: false, error: `Channel "${input.channelName}" not found` };
         }
 
-        const user = author || guild.members.cache.get(guild.ownerId).user;
+        // Use the actual message author if available, otherwise create fallback
+        let user = author;
+        if (!user) {
+            try {
+                const ownerMember = guild.members.cache.get(guild.ownerId);
+                if (ownerMember && ownerMember.user) {
+                    user = ownerMember.user;
+                } else {
+                    // Create a basic user object as fallback
+                    user = { 
+                        id: guild.ownerId || 'unknown', 
+                        username: 'Player',
+                        displayName: 'Player'
+                    };
+                }
+            } catch (err) {
+                console.log('Failed to get guild owner for number guess, using fallback:', err.message);
+                user = { 
+                    id: 'unknown', 
+                    username: 'Player',
+                    displayName: 'Player'
+                };
+            }
+        }
 
         const result = await gameService.startNumberGuessing(channel, user, {
             min: input.min,
