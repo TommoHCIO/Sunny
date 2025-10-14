@@ -2397,28 +2397,19 @@ async function startRockPaperScissors(guild, input) {
 
         let opponent = null;
         if (input.opponent) {
-            opponent = guild.members.cache.find(m =>
+            const member = guild.members.cache.find(m =>
                 m.user.username.toLowerCase() === input.opponent.toLowerCase() ||
                 m.displayName.toLowerCase() === input.opponent.toLowerCase()
             );
+            if (member) opponent = member.user;
         }
 
-        // Create a fake interaction object for the game
-        const fakeInteraction = {
-            user: guild.members.cache.get(guild.ownerId).user,
-            guild: guild,
-            channel: channel,
-            reply: async (options) => channel.send(options),
-            editReply: async (options) => null,
-            message: { edit: async (options) => null }
-        };
+        // Get the user who initiated the game (we'll use the bot owner as default)
+        const initiator = guild.members.cache.get(guild.ownerId).user;
 
-        await gameService.startRockPaperScissors(fakeInteraction, opponent?.user || null);
+        const result = await gameService.startRockPaperScissors(channel, initiator, opponent);
 
-        return {
-            success: true,
-            message: `Started Rock Paper Scissors game in #${channel.name}`
-        };
+        return result;
     } catch (error) {
         return { success: false, error: `Failed to start Rock Paper Scissors: ${error.message}` };
     }

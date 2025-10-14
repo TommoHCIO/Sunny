@@ -15,15 +15,7 @@ const {
 const { GameManager } = require('discord-trivia');
 const UserMemory = require('../models/UserMemory');
 
-// Initialize trivia manager with custom settings
-const triviaManager = new GameManager({
-    theme: 'autumn', // Custom theme matching The Nook
-    showAnswers: true,
-    displayScore: true,
-    startDelay: 10000, // 10 second delay before starting
-    questionTime: 20000, // 20 seconds per question
-    cooldown: 5000 // 5 second cooldown between questions
-});
+// Note: We'll create GameManager instances per game to avoid state issues
 
 // Store active games per channel to prevent multiple games
 const activeGames = new Map();
@@ -61,21 +53,40 @@ async function startTrivia(channel, options = {}) {
         // Mark channel as having active game
         activeGames.set(channel.id, true);
 
-        // Create and start the trivia game
-        const game = triviaManager.createGame(channel, gameOptions);
-
-        // Handle game events
-        game.on('gameEnd', async (results) => {
+        // Create a new GameManager instance for this game
+        const gameManager = new GameManager();
+        const game = gameManager.createGame(channel);
+        
+        // Configure the game based on options
+        if (options.category && options.category !== 'general') {
+            // Map our category names to Open Trivia DB category IDs
+            const categoryMap = {
+                'science': 17, // Science & Nature
+                'history': 23, // History  
+                'entertainment': 11, // Film
+                'sports': 21, // Sports
+                'geography': 22, // Geography
+                'general': 9 // General Knowledge
+            };
+            const categoryId = categoryMap[options.category.toLowerCase()] || 9;
+            game.setCategory(categoryId);
+        }
+        
+        if (options.difficulty) {
+            game.setDifficulty(options.difficulty.toLowerCase());
+        }
+        
+        if (options.questionCount) {
+            game.setQuestionCount(Math.min(options.questionCount, 10));
+        }
+        
+        // Start the game queue
+        game.startQueue().then(() => {
             activeGames.delete(channel.id);
-            await handleTriviaResults(channel, results);
-        });
-
-        game.on('error', (error) => {
+        }).catch((error) => {
             console.error('Trivia game error:', error);
             activeGames.delete(channel.id);
         });
-
-        await game.start();
 
         return {
             success: true,
@@ -177,22 +188,22 @@ async function createPoll(options) {
  * @param {User} opponent - Opponent user (null for vs bot)
  * @returns {Promise<void>}
  */
-async function startRockPaperScissors(interaction, opponent = null) {
+async function startRockPaperScissors(channel, user, opponent = null) {
     try {
-        const gameId = `rps_${interaction.user.id}_${Date.now()}`;
+        const gameId = `rps_${user.id}_${Date.now()}`;
         const choices = ['rock', 'paper', 'scissors'];
         const emojis = { rock: '🪨', paper: '📰', scissors: '✂️' };
 
         // Create game state
         const gameState = {
-            player1: interaction.user,
-            player2: opponent || 'bot',
+            type: 'rps',
+            players: [{ id: user.id, name: user.username }],
             player1Choice: null,
             player2Choice: null,
             gameId
         };
 
-        activeMiniGames.set(gameId, gameState);
+        activeGames.set(gameId, gameState);
 
         // Create buttons for choices
         const row = new ActionRowBuilder()
@@ -218,11 +229,11 @@ async function startRockPaperScissors(interaction, opponent = null) {
             .setColor('#F1C40F')
             .setTitle('🎮 Rock Paper Scissors!')
             .setDescription(opponent
-                ? `${interaction.user} vs ${opponent}\nBoth players, make your choice!`
-                : `${interaction.user} vs Sunny Bot\nMake your choice!`)
+                ? `${user.username} vs ${opponent}\nBoth players, make your choice!`
+                : `${user.username} vs Sunny Bot\nMake your choice!`)
             .setFooter({ text: 'You have 30 seconds to choose' });
 
-        await interaction.reply({
+        const message = await channel.send({
             embeds: [embed],
             components: [row]
         });
@@ -238,14 +249,86 @@ async function startRockPaperScissors(interaction, opponent = null) {
                 });
             }
         }, 30000);
+        
+        return {
+            success: true,
+            message: 'Rock Paper Scissors game started!',
+            gameId
+        };
     } catch (error) {
         console.error('Error starting RPS game:', error);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
+/**
+ * Process a Rock Paper Scissors choice
+ * @param {Interaction} interaction - Button interaction
+ * @param {String} gameId - Game ID
+ * @param {String} choice - Player's choice (rock/paper/scissors)
+ */
+async function processRPSChoice(interaction, gameId, choice) {
+    try {
+        const game = activeGames.get(gameId);
+        if (!game || game.type !== 'rps') return;
+        
+        // Bot makes a random choice
+        const choices = ['rock', 'paper', 'scissors'];
+        const botChoice = choices[Math.floor(Math.random() * choices.length)];
+        
+        // Determine winner
+        let result;
+        if (choice === botChoice) {
+            result = "It's a tie! 🤝";
+        } else if (
+            (choice === 'rock' && botChoice === 'scissors') ||
+            (choice === 'paper' && botChoice === 'rock') ||
+            (choice === 'scissors' && botChoice === 'paper')
+        ) {
+            result = 'You win! 🎉';
+            // Update user stats
+            await updateUserGameStats(interaction.user.id, 'rps_wins', 1);
+        } else {
+            result = 'Sunny wins! 🤖';
+        }
+        
+        const emojis = { rock: '🪨', paper: '📰', scissors: '✂️' };
+        
+        const embed = new EmbedBuilder()
+            .setColor(result.includes('win!') ? '#00FF00' : result.includes('tie') ? '#FFFF00' : '#FF0000')
+            .setTitle('🎮 Rock Paper Scissors - Results!')
+            .setDescription(
+                `**Your choice:** ${emojis[choice]} ${choice}\n` +
+                `**Sunny's choice:** ${emojis[botChoice]} ${botChoice}\n\n` +
+                `**${result}**`
+            )
+            .setTimestamp();
+        
+        // Disable all buttons
+        const disabledRow = new ActionRowBuilder()
+            .addComponents(
+                ...interaction.message.components[0].components.map(button =>
+                    ButtonBuilder.from(button).setDisabled(true)
+                )
+            );
+        
+        await interaction.update({
+            embeds: [embed],
+            components: [disabledRow]
+        });
+        
+        // Clean up game state
+        activeGames.delete(gameId);
+    } catch (error) {
+        console.error('Error processing RPS choice:', error);
         await interaction.reply({
-            content: 'Failed to start Rock Paper Scissors game.',
+            content: '❌ An error occurred processing your choice.',
             ephemeral: true
         });
     }
-}
 
 /**
  * Handle rock-paper-scissors button clicks
@@ -571,10 +654,12 @@ module.exports = {
     startTrivia,
     createPoll,
     startRockPaperScissors,
+    processRPSChoice,
     handleRPSChoice,
     startNumberGuessing,
     processNumberGuess,
     getLeaderboard,
     activeGames,
+    activePolls,
     activeMiniGames
 };
