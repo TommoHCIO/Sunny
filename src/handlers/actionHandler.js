@@ -1156,10 +1156,8 @@ class ActionHandler {
                 // Convert MP4 to GIF (Discord emojis require GIF format, not APNG like stickers)
                 const gifBuffer = await videoService.convertMP4ToGIF(emojiUrl);
 
-                // Create AttachmentBuilder from GIF buffer
-                fileToUpload = new AttachmentBuilder(gifBuffer, {
-                    name: `${emojiName}.gif`
-                });
+                // For emojis, use the buffer directly (not AttachmentBuilder)
+                fileToUpload = gifBuffer;
 
                 this.log('✅', `Video converted successfully to GIF for emoji: ${emojiName}`);
             } else if (imageService.isImageUrl(emojiUrl)) {
@@ -1168,10 +1166,8 @@ class ActionHandler {
                 // Process image (resize, compress)
                 const processedBuffer = await imageService.processImageForEmoji(emojiUrl);
 
-                // Create AttachmentBuilder from processed buffer
-                fileToUpload = new AttachmentBuilder(processedBuffer, {
-                    name: `${emojiName}.png`
-                });
+                // For emojis, use the buffer directly (not AttachmentBuilder)
+                fileToUpload = processedBuffer;
 
                 this.log('✅', `Image processed successfully for emoji: ${emojiName}`);
             }
