@@ -5,7 +5,7 @@ Sunny is a friendly AI admin and moderator for The Nook, a cozy autumn-themed Di
 ## Features
 
 - **Natural Conversation**: No slash commands - just talk to Sunny naturally by mentioning "Hey Sunny", using @mentions, or replying to her messages
-- **Advanced AI**: Powered by Claude Sonnet 4.5, the world's best coding model and strongest agent for complex workflows
+- **Multi-Provider AI**: Supports Anthropic Claude and Z.AI GLM models with easy switching between providers
 - **Admin & Moderator**: Sunny manages the server with owner-authorized actions and autonomous moderation
 - **75+ Discord Actions**: Complete server management including channels, roles, threads, forums, events, emojis, and permissions
 - **Role Management**: Self-assignable interest and pronoun roles with auto-creation
@@ -43,12 +43,19 @@ Sunny is a friendly AI admin and moderator for The Nook, a cozy autumn-themed Di
 2. Right-click your username and select "Copy User ID"
 3. Save this ID - you'll need it for the `.env` file
 
-### 3. Get Claude API Key
+### 3. Get AI Provider API Key
 
+#### Option A: Anthropic Claude (Recommended for stability)
 1. Go to [Anthropic Console](https://console.anthropic.com/)
 2. Create an account or sign in
 3. Go to API Keys and create a new key
 4. Copy the key (starts with `sk-ant-api03-`)
+
+#### Option B: Z.AI GLM (Recommended for cost savings)
+1. Go to [Z.AI Console](https://console.z.ai/)
+2. Create an account or sign in
+3. Create a new API key
+4. Copy the key
 
 ### 4. Install and Configure
 
@@ -65,7 +72,18 @@ cp config/.env.example .env
 # Edit .env with your values
 DISCORD_TOKEN=your_discord_bot_token_here
 DISCORD_OWNER_ID=your_discord_user_id_here
+
+# AI Provider Configuration
+AI_PROVIDER=anthropic  # or 'zai'
+
+# Anthropic Claude
 CLAUDE_API_KEY=sk-ant-api03-your_api_key_here
+CLAUDE_MODEL=claude-3-haiku-20240307  # or claude-3-5-haiku-20241022
+
+# Z.AI (optional, for cost savings)
+ZAI_API_KEY=your_zai_api_key_here
+ZAI_MODEL=glm-4.5-air
+
 MONGODB_URI=mongodb+srv://... (optional)
 MODERATION_LEVEL=2
 ```
@@ -126,6 +144,125 @@ If a regular member tries:
 Member: Sunny, delete the #general channel
 Sunny: I can only do that when [Your Name] asks me to! It's to keep the server safe and organized. Is there something else I can help you with?
 ```
+
+## AI Provider Options
+
+Sunny supports multiple AI providers with easy switching. Choose based on your needs:
+
+### Quick Comparison
+
+| Provider | Model | Input Cost | Output Cost | Monthly Est.* | Best For |
+|----------|-------|-----------|-------------|--------------|----------|
+| **Anthropic** | Claude 3.5 Haiku | $0.80/1M | $4.00/1M | $10-30 | Current (baseline) |
+| **Anthropic** | Claude 3 Haiku | $0.25/1M | $1.25/1M | $3-8 | **73% savings** |
+| **Z.AI** | GLM-4.5-Air | $0.20/1M | $1.10/1M | $2-6 | **81% savings** |
+| **Z.AI** | GLM-4.5 | $0.60/1M | $2.20/1M | $7-20 | Premium features |
+
+*Monthly estimates for typical Discord bot usage (<100 active members)
+
+### Option 1: Anthropic Claude (Default)
+
+**Recommended for:** Stability, proven reliability, official support
+
+**Available Models:**
+- `claude-3-5-haiku-20241022` - Current default, good balance
+- `claude-3-haiku-20240307` - **Save 73%**, older but capable
+
+**Pros:**
+- ✅ Proven stability and reliability
+- ✅ Official Anthropic support
+- ✅ Excellent documentation
+- ✅ Prompt caching (90% savings on repeated context)
+- ✅ Well-tested in production
+
+**Cons:**
+- ❌ More expensive than Z.AI
+- ❌ 3 Haiku is older (March 2024)
+
+**Setup:**
+```env
+AI_PROVIDER=anthropic
+CLAUDE_API_KEY=sk-ant-api03-your_key_here
+CLAUDE_MODEL=claude-3-haiku-20240307  # or claude-3-5-haiku-20241022
+```
+
+### Option 2: Z.AI GLM (Cost Optimized) ⭐
+
+**Recommended for:** Maximum cost savings, excellent tool-calling
+
+**Available Models:**
+- `glm-4.5-air` - **Recommended**, best value (81% savings)
+- `glm-4.5` - More powerful, still cheaper than Claude
+- `glm-4.6` - Latest version
+
+**Pros:**
+- ✅ **90.6% tool-calling success rate** (beats Claude 4 Sonnet!)
+- ✅ **81% cost savings** over Claude 3.5 Haiku
+- ✅ Designed specifically for agentic workflows
+- ✅ 2x faster than GLM-4.5 (217.5 tokens/sec)
+- ✅ 128K context window
+- ✅ OpenAI-compatible API (easy integration)
+- ✅ Hybrid thinking modes (thinking + instant)
+
+**Cons:**
+- ⚠️ U.S. Entity List restriction (check if applicable)
+- ⚠️ Less proven in production than Claude
+- ⚠️ Newer provider (less community support)
+
+**Setup:**
+```env
+AI_PROVIDER=zai
+ZAI_API_KEY=your_zai_api_key_here
+ZAI_MODEL=glm-4.5-air
+ZAI_BASE_URL=https://api.z.ai/api/paas/v4/
+```
+
+**Get API Key:** https://console.z.ai/
+
+### Switching Providers
+
+Change providers instantly without code changes:
+
+```bash
+# Switch to Claude 3 Haiku (73% savings)
+echo "AI_PROVIDER=anthropic" >> .env
+echo "CLAUDE_MODEL=claude-3-haiku-20240307" >> .env
+npm restart
+
+# Switch to Z.AI (81% savings)
+echo "AI_PROVIDER=zai" >> .env
+echo "ZAI_MODEL=glm-4.5-air" >> .env
+npm restart
+```
+
+### Performance Comparison
+
+**Tool Calling Success Rate:**
+- GLM-4.5-Air: **90.6%** 🏆
+- Claude 4 Sonnet: 89.5%
+- Claude 3.5 Haiku: ~85%
+
+**Response Speed:**
+- GLM-4.5-Air: **217.5 tokens/sec** ⚡
+- GLM-4.5: ~100 tokens/sec
+- Claude 3.5 Haiku: ~80-100 tokens/sec
+
+**Global Rankings:**
+- GLM-4.5: Ranked 3rd globally (12 benchmarks)
+- GLM-4.5-Air: Ranked 6th globally
+- Beats: Gemini 2.5 Flash, Qwen3-235B
+
+### Migration Guide
+
+See [MIGRATION_TEST_CHECKLIST.md](MIGRATION_TEST_CHECKLIST.md) for comprehensive testing before switching providers.
+
+**Recommended Strategy:**
+1. **Phase 1 (5 mins):** Switch to Claude 3 Haiku → Save 73% immediately
+2. **Test for 1 week:** Monitor quality and performance
+3. **Phase 2 (optional):** Migrate to Z.AI GLM-4.5-Air → Save 81% total
+4. **Rollback anytime:** Just change `AI_PROVIDER` in `.env`
+
+**Zero-downtime rollback** is always available!
 
 ## Project Structure
 

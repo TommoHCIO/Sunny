@@ -1,12 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(curl -s -X POST 'http://localhost:8000/mcp' -H 'Content-Type: application/json' -H 'Authorization: Bearer dmcp-haIHeSCgIxf8q2wo7CJD11LZk1LQ2xHjLt8haaavRZN8NYis' --data @deploy_msg.json)",
-      "Bash(curl -s -X POST 'http://localhost:8000/mcp' -H 'Content-Type: application/json' -H 'Authorization: Bearer dmcp-haIHeSCgIxf8q2wo7CJD11LZk1LQ2xHjLt8haaavRZN8NYis' --data '{\"\"jsonrpc\"\":\"\"2.0\"\",\"\"method\"\":\"\"tools/call\"\",\"\"params\"\":{\"\"name\"\":\"\"send_discord_message\"\",\"\"arguments\"\":{\"\"channel_id\"\":\"\"1425938118556782693\"\",\"\"content\"\":\"\"sunny start rock paper scissors game\"\"}},\"\"id\"\":1}')",
-      "Bash(curl -s -X POST 'http://localhost:8000/mcp' -H 'Content-Type: application/json' -H 'Authorization: Bearer dmcp-haIHeSCgIxf8q2wo7CJD11LZk1LQ2xHjLt8haaavRZN8NYis' --data '{\"\"jsonrpc\"\":\"\"2.0\"\",\"\"method\"\":\"\"tools/call\"\",\"\"params\"\":{\"\"name\"\":\"\"get_discord_messages\"\",\"\"arguments\"\":{\"\"channel_id\"\":\"\"1425938118556782693\"\",\"\"limit\"\":10}},\"\"id\"\":1}')",
-      "Bash(curl -s -X POST 'http://localhost:8000/mcp' -H 'Content-Type: application/json' -H 'Authorization: Bearer dmcp-haIHeSCgIxf8q2wo7CJD11LZk1LQ2xHjLt8haaavRZN8NYis' --data @trivia_fix.json)",
-      "Bash(curl -s -X POST 'http://localhost:8000/mcp' -H 'Content-Type: application/json' -H 'Authorization: Bearer dmcp-haIHeSCgIxf8q2wo7CJD11LZk1LQ2xHjLt8haaavRZN8NYis' --data @ai_trivia_msg.json)",
-      "Bash(curl -s -X POST 'http://localhost:8000/mcp' -H 'Content-Type: application/json' -H 'Authorization: Bearer dmcp-haIHeSCgIxf8q2wo7CJD11LZk1LQ2xHjLt8haaavRZN8NYis' --data @clean_trivia.json)"
+      "Bash(curl -s -X POST 'http://localhost:8000/mcp' -H 'Content-Type: application/json' -H 'Authorization: Bearer dmcp-haIHeSCgIxf8q2wo7CJD11LZk1LQ2xHjLt8haaavRZN8NYis' --data @revert_msg.json)"
     ],
     "deny": [],
     "ask": []
