@@ -266,6 +266,7 @@ async function getVideoInfo(videoUrl) {
 /**
  * Convert MP4 video to GIF for Discord animated emoji
  * Requirements: 256x256 pixels, under 256KB, GIF format
+ * Version: 1.1 - Force Render redeploy
  *
  * @param {string} videoUrl - URL or local path to MP4 video
  * @returns {Promise<Buffer>} Processed GIF buffer
