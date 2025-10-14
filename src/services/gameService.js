@@ -169,23 +169,30 @@ async function startTrivia(channel, options = {}) {
         const category = options.category || 'general';
         const difficulty = options.difficulty || 'medium';
         
-        // Show a "generating" message while we create the question
-        const generatingEmbed = new EmbedBuilder()
-            .setColor('#FFA500')
-            .setTitle('🤔 Generating Trivia Question...')
-            .setDescription(`Creating a ${difficulty} ${category} question just for you!`)
-            .setFooter({ text: 'This will just take a moment...' });
+        // Generate the question (show generating message only if it takes long)
+        const questionPromise = generateTriviaQuestion(category, difficulty);
+        let generatingMsg = null;
         
-        const generatingMsg = await channel.send({ embeds: [generatingEmbed] });
+        // Show generating message after 1 second if still loading
+        const generatingTimeout = setTimeout(async () => {
+            const generatingEmbed = new EmbedBuilder()
+                .setColor('#FFA500')
+                .setTitle('🤔 Generating Trivia Question...')
+                .setDescription(`Creating a ${difficulty} ${category} question just for you!`)
+                .setFooter({ text: 'This will just take a moment...' });
+            
+            generatingMsg = await channel.send({ embeds: [generatingEmbed] });
+        }, 1000);
         
-        // Generate the question
-        const question = await generateTriviaQuestion(category, difficulty);
+        // Wait for question
+        const question = await questionPromise;
+        clearTimeout(generatingTimeout);
         
-        // Delete the generating message
-        try {
-            await generatingMsg.delete();
-        } catch (err) {
-            // Message might already be deleted
+        // Delete generating message if it was shown
+        if (generatingMsg) {
+            try {
+                await generatingMsg.delete();
+            } catch (err) {}
         }
 
         // Create unique game ID
@@ -327,7 +334,7 @@ async function startTrivia(channel, options = {}) {
 }
 
 /**
- * Start a multi-question trivia session
+ * Start a multi-question trivia session with progressive message deletion
  * @param {TextChannel} channel - Discord channel
  * @param {Object} options - Game options
  * @returns {Promise<Object>} Session result
@@ -346,6 +353,7 @@ async function startTriviaSession(channel, options = {}) {
         const category = options.category || 'general';
         const difficulty = options.difficulty || 'medium';
         const sessionScores = new Map(); // Track scores across questions
+        const messagesToDelete = []; // Track messages to clean up
         
         // Announce the session
         const startEmbed = new EmbedBuilder()
@@ -359,7 +367,8 @@ async function startTriviaSession(channel, options = {}) {
             )
             .setFooter({ text: 'First question coming up in 5 seconds...' });
         
-        await channel.send({ embeds: [startEmbed] });
+        const startMsg = await channel.send({ embeds: [startEmbed] });
+        messagesToDelete.push(startMsg);
         
         // Mark channel as having active game
         activeGames.set(channel.id, { type: 'trivia_session' });
@@ -367,26 +376,46 @@ async function startTriviaSession(channel, options = {}) {
         // Wait before starting
         await new Promise(resolve => setTimeout(resolve, 5000));
         
+        // Delete the start message
+        try {
+            await startMsg.delete();
+        } catch (err) {}
+        
         // Run through questions
         for (let i = 0; i < questionCount; i++) {
             // Check if session was cancelled
             if (!activeGames.has(channel.id)) break;
             
-            // Show question number
-            if (i > 0) {
-                await channel.send(`**Question ${i + 1} of ${questionCount} coming up...**`);
-                await new Promise(resolve => setTimeout(resolve, 2000));
+            // Clear old messages from previous question
+            if (messagesToDelete.length > 0) {
+                for (const msg of messagesToDelete) {
+                    try {
+                        await msg.delete();
+                    } catch (err) {}
+                }
+                messagesToDelete.length = 0; // Clear the array
             }
             
             // Generate and show question
             const question = await generateTriviaQuestion(category, difficulty);
             const gameId = `trivia_${channel.id}_${Date.now()}`;
             
+            // Create running score display
+            let scoreDisplay = '';
+            if (i > 0 && sessionScores.size > 0) {
+                const topScorers = Array.from(sessionScores.entries())
+                    .sort(([,a], [,b]) => b - a)
+                    .slice(0, 3)
+                    .map(([userId, score]) => `<@${userId}>: ${score}`)
+                    .join(' | ');
+                scoreDisplay = `\n🏆 **Current Leaders:** ${topScorers}`;
+            }
+            
             // Create embed with question
             const embed = new EmbedBuilder()
                 .setColor('#00CED1')
-                .setTitle(`🧠 Question ${i + 1}/${questionCount}`)
-                .setDescription(question.question)
+                .setTitle(`🧠 Question ${i + 1} of ${questionCount}`)
+                .setDescription(question.question + scoreDisplay)
                 .addFields(
                     question.answers.map((answer, index) => ({
                         name: `${['A', 'B', 'C', 'D'][index]}`,
@@ -394,7 +423,7 @@ async function startTriviaSession(channel, options = {}) {
                         inline: true
                     }))
                 )
-                .setFooter({ text: `Category: ${question.category} | 20 seconds to answer!` });
+                .setFooter({ text: `${question.category} | ${difficulty} | 20 seconds to answer!` });
 
             // Create answer buttons
             const row = new ActionRowBuilder()
@@ -408,6 +437,7 @@ async function startTriviaSession(channel, options = {}) {
                 );
 
             const triviaMessage = await channel.send({ embeds: [embed], components: [row] });
+            messagesToDelete.push(triviaMessage); // Track for deletion
             
             // Store game state
             const gameState = {
@@ -438,39 +468,50 @@ async function startTriviaSession(channel, options = {}) {
                         await triviaMessage.edit({ components: [disabledRow] });
                     } catch (err) {}
                     
-                    // Show results
-                    const correctLetter = ['A', 'B', 'C', 'D'][question.correct];
-                    const correctAnswer = question.answers[question.correct];
-                    
-                    let resultMsg = `✅ **Answer:** ${correctLetter}. ${correctAnswer}`;
-                    if (question.explanation) {
-                        resultMsg += `\n💡 ${question.explanation}`;
-                    }
-                    
-                    // Update session scores
-                    for (const [userId, answer] of gameState.participants) {
-                        if (answer === question.correct) {
-                            sessionScores.set(userId, (sessionScores.get(userId) || 0) + 1);
-                        }
-                    }
-                    
-                    // Show who got it right
+                    // Update session scores FIRST
                     const correctUsers = [];
                     for (const [userId, answer] of gameState.participants) {
                         if (answer === question.correct) {
+                            sessionScores.set(userId, (sessionScores.get(userId) || 0) + 1);
                             correctUsers.push(`<@${userId}>`);
                         }
                     }
                     
-                    if (correctUsers.length > 0) {
-                        resultMsg += `\n**Got it right:** ${correctUsers.join(', ')}`;
-                    } else if (gameState.participants.size > 0) {
-                        resultMsg += `\n**Nobody got this one!**`;
-                    } else {
-                        resultMsg += `\n**Nobody answered!**`;
+                    // Build compact results message
+                    const correctLetter = ['A', 'B', 'C', 'D'][question.correct];
+                    const correctAnswer = question.answers[question.correct];
+                    
+                    const resultsEmbed = new EmbedBuilder()
+                        .setColor(correctUsers.length > 0 ? '#00FF00' : '#FF0000')
+                        .setTitle(`✅ Answer: ${correctLetter}. ${correctAnswer}`)
+                        .setDescription(
+                            (question.explanation ? `💡 ${question.explanation}\n\n` : '') +
+                            (correctUsers.length > 0 
+                                ? `**Got it right:** ${correctUsers.join(', ')}` 
+                                : gameState.participants.size > 0 
+                                    ? '**Nobody got this one!**' 
+                                    : '**Nobody answered!**')
+                        );
+                    
+                    // Show current standings if not last question
+                    if (i < questionCount - 1 && sessionScores.size > 0) {
+                        const standings = Array.from(sessionScores.entries())
+                            .sort(([,a], [,b]) => b - a)
+                            .slice(0, 5)
+                            .map(([userId, score], idx) => `${idx + 1}. <@${userId}>: **${score}** pts`)
+                            .join('\n');
+                        
+                        resultsEmbed.addFields({
+                            name: '📊 Current Standings',
+                            value: standings,
+                            inline: false
+                        });
+                        
+                        resultsEmbed.setFooter({ text: `Next question in 5 seconds...` });
                     }
                     
-                    await channel.send(resultMsg);
+                    const resultMsg = await channel.send({ embeds: [resultsEmbed] });
+                    messagesToDelete.push(resultMsg);
                     
                     // Clean up this game
                     activeGames.delete(gameId);
@@ -479,10 +520,18 @@ async function startTriviaSession(channel, options = {}) {
                 }, 20000);
             });
             
-            // Wait between questions
+            // Wait between questions (longer to read results)
             if (i < questionCount - 1) {
-                await new Promise(resolve => setTimeout(resolve, 3000));
+                await new Promise(resolve => setTimeout(resolve, 5000));
             }
+        }
+        
+        // Clean up remaining messages before showing final results
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        for (const msg of messagesToDelete) {
+            try {
+                await msg.delete();
+            } catch (err) {}
         }
         
         // Show final results
@@ -494,19 +543,34 @@ async function startTriviaSession(channel, options = {}) {
             const resultsEmbed = new EmbedBuilder()
                 .setColor('#FFD700')
                 .setTitle('🏆 Trivia Session Complete!')
-                .setDescription('Great game everyone! Here are the final scores:');
+                .setDescription(`**Final Results - ${questionCount} Questions**`);
             
-            sortedScores.forEach(([userId, score], index) => {
-                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🏅';
+            // Add winner announcement
+            if (sortedScores.length > 0) {
+                const [winnerId, winnerScore] = sortedScores[0];
                 resultsEmbed.addFields({
-                    name: `${medal} Place ${index + 1}`,
-                    value: `<@${userId}> - **${score}/${questionCount}** correct`,
-                    inline: true
+                    name: '🎉 Winner!',
+                    value: `<@${winnerId}> with **${winnerScore}/${questionCount}** correct!`,
+                    inline: false
                 });
-                
-                // Update user stats
-                updateGameStats(userId, channel.guild.id, 'trivia', score);
+            }
+            
+            // Add full leaderboard
+            const leaderboardText = sortedScores.map(([userId, score], index) => {
+                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
+                return `${medal} <@${userId}> - **${score}** correct`;
+            }).join('\n');
+            
+            resultsEmbed.addFields({
+                name: '📊 Full Standings',
+                value: leaderboardText,
+                inline: false
             });
+            
+            // Update user stats
+            for (const [userId, score] of sortedScores) {
+                await updateGameStats(userId, channel.guild.id, 'trivia', score);
+            }
             
             await channel.send({ embeds: [resultsEmbed] });
         } else {
