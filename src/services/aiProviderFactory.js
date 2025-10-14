@@ -26,13 +26,19 @@ const zaiProvider = require('./providers/zaiProvider');
  */
 function getAIProvider() {
     const provider = process.env.AI_PROVIDER || 'anthropic';
-    
-    console.log(`🤖 Using AI Provider: ${provider}`);
-    
+
+    // Force logging to ensure it appears
+    console.error(`🤖 [AI_PROVIDER_FACTORY] Using AI Provider: ${provider}`);
+    console.error(`🔍 [AI_PROVIDER_FACTORY] ZAI_API_KEY set: ${!!process.env.ZAI_API_KEY}`);
+    console.error(`🔍 [AI_PROVIDER_FACTORY] ZAI_BASE_URL: ${process.env.ZAI_BASE_URL}`);
+    console.error(`🔍 [AI_PROVIDER_FACTORY] CLAUDE_API_KEY set: ${!!process.env.CLAUDE_API_KEY}`);
+
     switch (provider.toLowerCase()) {
         case 'zai':
+            console.error(`✅ [AI_PROVIDER_FACTORY] Returning Z.AI provider`);
             return zaiProvider;
         case 'anthropic':
+            console.error(`✅ [AI_PROVIDER_FACTORY] Returning Anthropic provider`);
             return anthropicProvider;
         default:
             throw new Error(`Unknown AI provider: ${provider}. Valid options: 'anthropic', 'zai'`);
