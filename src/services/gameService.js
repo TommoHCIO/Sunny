@@ -395,6 +395,7 @@ async function processRPSChoice(interaction, gameId, choice) {
             ephemeral: true
         });
     }
+}
 
 /**
  * Handle rock-paper-scissors button clicks
