@@ -263,8 +263,129 @@ async function getVideoInfo(videoUrl) {
     });
 }
 
+/**
+ * Convert MP4 video to GIF for Discord animated emoji
+ * Requirements: 256x256 pixels, under 256KB, GIF format
+ *
+ * @param {string} videoUrl - URL or local path to MP4 video
+ * @returns {Promise<Buffer>} Processed GIF buffer
+ */
+async function convertMP4ToGIF(videoUrl) {
+    let tempInputPath = null;
+    let tempFiles = [];
+
+    try {
+        console.log(`[VideoService] Converting MP4 to GIF for emoji: ${videoUrl}`);
+
+        // Create temp file paths
+        const tempId = crypto.randomBytes(16).toString('hex');
+        tempInputPath = path.join(process.cwd(), `temp_${tempId}_input.mp4`);
+
+        // Download video from URL
+        console.log(`[VideoService] Downloading video...`);
+        const videoBuffer = await downloadVideo(videoUrl);
+        await fs.writeFile(tempInputPath, videoBuffer);
+        console.log(`[VideoService] Video downloaded: ${(videoBuffer.length / 1024).toFixed(2)} KB`);
+
+        // Progressive compression settings for GIF (smaller size for emojis)
+        const compressionLevels = [
+            { fps: 20, duration: 3, scale: 256, colors: 256, description: 'Normal quality' },
+            { fps: 15, duration: 2.5, scale: 256, colors: 128, description: 'Reduced FPS & colors' },
+            { fps: 12, duration: 2, scale: 200, colors: 64, description: 'Lower quality' },
+            { fps: 10, duration: 1.5, scale: 160, colors: 32, description: 'Aggressive compression' },
+            { fps: 8, duration: 1, scale: 128, colors: 16, description: 'Very aggressive' },
+            { fps: 5, duration: 0.5, scale: 96, colors: 16, description: 'Maximum compression' }
+        ];
+
+        let finalBuffer = null;
+        let attempts = 0;
+
+        for (const level of compressionLevels) {
+            attempts++;
+            const tempPalettePath = path.join(process.cwd(), `temp_${tempId}_palette${attempts}.png`);
+            const tempOutputPath = path.join(process.cwd(), `temp_${tempId}_level${attempts}.gif`);
+            tempFiles.push(tempPalettePath, tempOutputPath);
+
+            console.log(`[VideoService] GIF Attempt ${attempts}: ${level.description} (${level.fps}fps, ${level.duration}s, ${level.scale}px, ${level.colors} colors)`);
+
+            // Generate palette for better GIF quality
+            await new Promise((resolve, reject) => {
+                const paletteGen = spawn(ffmpegPath, [
+                    '-i', tempInputPath,
+                    '-vf', `fps=${level.fps},scale=${level.scale}:${level.scale}:flags=lanczos,palettegen=max_colors=${level.colors}`,
+                    '-t', level.duration.toString(),
+                    '-y', tempPalettePath
+                ]);
+
+                paletteGen.on('close', (code) => {
+                    if (code === 0) resolve();
+                    else reject(new Error(`Palette generation failed with code ${code}`));
+                });
+
+                paletteGen.on('error', reject);
+            });
+
+            // Convert to GIF using palette
+            await new Promise((resolve, reject) => {
+                const gifGen = spawn(ffmpegPath, [
+                    '-i', tempInputPath,
+                    '-i', tempPalettePath,
+                    '-lavfi', `fps=${level.fps},scale=${level.scale}:${level.scale}:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5`,
+                    '-t', level.duration.toString(),
+                    '-y', tempOutputPath
+                ]);
+
+                gifGen.on('close', (code) => {
+                    if (code === 0) resolve();
+                    else reject(new Error(`GIF conversion failed with code ${code}`));
+                });
+
+                gifGen.on('error', reject);
+            });
+
+            // Read the output file
+            const gifBuffer = await fs.readFile(tempOutputPath);
+            const sizeInKB = (gifBuffer.length / 1024).toFixed(2);
+            console.log(`[VideoService] GIF size: ${sizeInKB} KB`);
+
+            // Check if size is within Discord emoji limits (target 240KB to be safe)
+            if (gifBuffer.length <= 240000) {
+                console.log(`[VideoService] ✅ Success! GIF is under 240KB limit`);
+                finalBuffer = gifBuffer;
+                break;
+            } else {
+                console.log(`[VideoService] Still too large (${sizeInKB} KB), trying next compression level...`);
+            }
+
+            // Cleanup this attempt's files if not the final one
+            await fs.unlink(tempPalettePath).catch(() => {});
+            await fs.unlink(tempOutputPath).catch(() => {});
+            tempFiles = tempFiles.filter(f => f !== tempPalettePath && f !== tempOutputPath);
+        }
+
+        if (!finalBuffer) {
+            throw new Error(`Could not compress video under 240KB even with maximum compression. Video may be too complex for Discord emoji.`);
+        }
+
+        return finalBuffer;
+
+    } catch (error) {
+        console.error('[VideoService] Failed to convert MP4 to GIF:', error);
+        throw new Error(`Failed to convert video to GIF: ${error.message}`);
+    } finally {
+        // Cleanup temp files
+        if (tempInputPath) {
+            await fs.unlink(tempInputPath).catch(() => {});
+        }
+        for (const tempFile of tempFiles) {
+            await fs.unlink(tempFile).catch(() => {});
+        }
+    }
+}
+
 module.exports = {
     convertMP4ToAPNG,
+    convertMP4ToGIF,
     downloadVideo,
     isVideoUrl,
     getVideoInfo

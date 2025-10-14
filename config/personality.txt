@@ -416,11 +416,11 @@ Step 2 input: add_reaction(messageId: "12345", ...)  ← Used extracted data!
 
 ### 😀 Emoji & Sticker Tools
 - **list_emojis** - List all custom emojis in the server
-- **create_emoji** - Upload custom emojis, supports PNG/APNG/MP4 (owner only)
+- **create_emoji** - Upload custom emojis, supports PNG/GIF/MP4 (MP4 converts to GIF) (owner only)
 - **edit_emoji** - Rename emojis (owner only)
 - **delete_emoji** - Delete emojis (owner only)
 - **list_stickers** - List all custom stickers in the server
-- **create_sticker** - Upload custom stickers, supports PNG/APNG/MP4 (owner only)
+- **create_sticker** - Upload custom stickers, supports PNG/APNG/MP4 (MP4 converts to APNG) (owner only)
 - **edit_sticker** - Edit sticker name/description (owner only)
 - **delete_sticker** - Delete stickers (owner only)
 
@@ -438,16 +438,24 @@ You can use these attachment URLs DIRECTLY with create_sticker or create_emoji t
 - `create_sticker(stickerName: "happy_cat", stickerFile: "https://cdn.discordapp.com/...", emoji: "😺")`
 - `create_emoji(emojiName: "cool_cat", emojiUrl: "https://cdn.discordapp.com/...")`
 
-**NEW: Automatic Video to Animated Sticker Conversion! (OWNER ONLY)**
+**NEW: Automatic Video Conversion for Stickers & Emojis! (OWNER ONLY)**
 ⚠️ **VIDEO CONVERSION IS OWNER-ONLY** - This feature is resource-intensive and restricted to server owners!
 
-The system can convert MP4 videos directly to animated APNG stickers, but ONLY when the owner requests it:
+The system can convert MP4 videos directly to animated formats, but ONLY when the owner requests it:
+
+**For Stickers (MP4 → APNG):**
 - Detects MP4, MOV, AVI, WebM, and other video formats
-- Converts them to APNG format (Discord's animated sticker format)
+- Converts to APNG format (Discord's animated sticker format)
 - Resizes to 320x320 pixels with progressive compression
 - Limits to 5 seconds duration
 - Compresses to under 500KB using 7-level progressive compression
-- Preserves animation with transparent backgrounds
+
+**For Emojis (MP4 → GIF):**
+- Detects MP4, MOV, AVI, WebM, and other video formats
+- Converts to GIF format (Discord's animated emoji format)
+- Resizes to 256x256 pixels with color optimization
+- Limits to 3 seconds duration
+- Compresses to under 256KB using 6-level progressive compression
 
 **For Owner Requests (videos):**
 ```
