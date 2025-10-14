@@ -79,13 +79,15 @@ Return ONLY a JSON object in this exact format (no markdown, no extra text):
 }
 
 Rules:
-- The question should be appropriate for all ages
+- The question should be appropriate for all ages but intellectually challenging
 - Make exactly 4 answer options
 - The correct answer index (0-3) should be randomized
-- Answers should be plausible but only one correct
-- ${difficulty === 'easy' ? 'Make the question straightforward and common knowledge' : difficulty === 'hard' ? 'Make the question challenging but fair, requiring deeper knowledge' : 'Make the question moderately challenging'}
+- All answers should be highly plausible to make it challenging
+- ${difficulty === 'easy' ? 'Make the question accessible but not obvious, avoiding overly simple facts' : difficulty === 'hard' ? 'Make the question very challenging, requiring specialized knowledge or careful thinking. Include subtle details, specific dates, lesser-known facts, or complex concepts' : 'Make the question moderately challenging, requiring good general knowledge'}
 - The question should be factual and verifiable
-- Don't use "all of the above" or "none of the above" as options`;
+- Don't use "all of the above" or "none of the above" as options
+- Avoid questions everyone would know (like "What is 2+2?" or "Capital of France")
+- Focus on interesting, lesser-known facts that educated adults might find challenging`;
 
         const response = await anthropic.messages.create({
             model: 'claude-3-haiku-20240307',
@@ -150,187 +152,11 @@ Rules:
  * @returns {Promise<Object>} Game result
  */
 async function startTrivia(channel, options = {}) {
-    // Support multi-question sessions
-    const questionCount = Math.min(options.questionCount || 1, 10); // Max 10 questions
+    // Default to 5 questions if not specified, support up to 10
+    const questionCount = Math.min(options.questionCount || 5, 10);
     
-    if (questionCount > 1) {
-        return startTriviaSession(channel, options);
-    }
-    try {
-        // Check if a game is already active in this channel
-        if (activeGames.has(channel.id)) {
-            return {
-                success: false,
-                error: 'A game is already in progress in this channel!'
-            };
-        }
-
-        // Generate a dynamic trivia question using AI
-        const category = options.category || 'general';
-        const difficulty = options.difficulty || 'medium';
-        
-        // Generate the question (show generating message only if it takes long)
-        const questionPromise = generateTriviaQuestion(category, difficulty);
-        let generatingMsg = null;
-        
-        // Show generating message after 1 second if still loading
-        const generatingTimeout = setTimeout(async () => {
-            const generatingEmbed = new EmbedBuilder()
-                .setColor('#FFA500')
-                .setTitle('🤔 Generating Trivia Question...')
-                .setDescription(`Creating a ${difficulty} ${category} question just for you!`)
-                .setFooter({ text: 'This will just take a moment...' });
-            
-            generatingMsg = await channel.send({ embeds: [generatingEmbed] });
-        }, 1000);
-        
-        // Wait for question
-        const question = await questionPromise;
-        clearTimeout(generatingTimeout);
-        
-        // Delete generating message if it was shown
-        if (generatingMsg) {
-            try {
-                await generatingMsg.delete();
-            } catch (err) {}
-        }
-
-        // Create unique game ID
-        const gameId = `trivia_${channel.id}_${Date.now()}`;
-        
-        // Create embed with question
-        const embed = new EmbedBuilder()
-            .setColor('#00CED1')
-            .setTitle('🧠 Trivia Question!')
-            .setDescription(question.question)
-            .addFields(
-                question.answers.map((answer, index) => ({
-                    name: `${['A', 'B', 'C', 'D'][index]}`,
-                    value: answer,
-                    inline: true
-                }))
-            )
-            .setFooter({ text: `Category: ${question.category} | You have 30 seconds to answer!` });
-
-        // Create answer buttons
-        const row = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`trivia_A_${gameId}`)
-                    .setLabel('A')
-                    .setStyle(ButtonStyle.Primary),
-                new ButtonBuilder()
-                    .setCustomId(`trivia_B_${gameId}`)
-                    .setLabel('B')
-                    .setStyle(ButtonStyle.Primary),
-                new ButtonBuilder()
-                    .setCustomId(`trivia_C_${gameId}`)
-                    .setLabel('C')
-                    .setStyle(ButtonStyle.Primary),
-                new ButtonBuilder()
-                    .setCustomId(`trivia_D_${gameId}`)
-                    .setLabel('D')
-                    .setStyle(ButtonStyle.Primary)
-            );
-
-        const triviaMessage = await channel.send({ embeds: [embed], components: [row] });
-
-        // Mark game as active with more details
-        activeGames.set(gameId, {
-            type: 'trivia',
-            channelId: channel.id,
-            question: question,
-            messageId: triviaMessage.id,
-            startTime: Date.now(),
-            participants: new Map(), // Track who answered and what
-            ended: false
-        });
-
-        // End the game after 30 seconds
-        setTimeout(async () => {
-            const game = activeGames.get(gameId);
-            if (game && !game.ended) {
-                game.ended = true;
-                
-                const correctAnswer = question.answers[question.correct];
-                const correctLetter = ['A', 'B', 'C', 'D'][question.correct];
-                
-                // Disable all buttons
-                const disabledRow = new ActionRowBuilder()
-                    .addComponents(
-                        row.components.map(button => 
-                            ButtonBuilder.from(button).setDisabled(true)
-                        )
-                    );
-                
-                // Update original message to disable buttons
-                try {
-                    await triviaMessage.edit({ components: [disabledRow] });
-                } catch (err) {
-                    console.error('Could not disable trivia buttons:', err);
-                }
-                
-                // Build results message
-                let resultDescription = `The correct answer was: **${correctLetter}. ${correctAnswer}**\n\n`;
-                
-                // Add explanation if available
-                if (question.explanation) {
-                    resultDescription += `💡 **Explanation:** ${question.explanation}\n\n`;
-                }
-                
-                if (game.participants.size > 0) {
-                    const correctUsers = [];
-                    const incorrectUsers = [];
-                    
-                    for (const [userId, answer] of game.participants) {
-                        if (answer === question.correct) {
-                            correctUsers.push(`<@${userId}>`);
-                        } else {
-                            incorrectUsers.push(`<@${userId}>`);
-                        }
-                    }
-                    
-                    if (correctUsers.length > 0) {
-                        resultDescription += `✅ **Correct:** ${correctUsers.join(', ')}\n`;
-                    }
-                    if (incorrectUsers.length > 0) {
-                        resultDescription += `❌ **Incorrect:** ${incorrectUsers.join(', ')}\n`;
-                    }
-                } else {
-                    resultDescription += `Nobody answered in time!`;
-                }
-                
-                const resultEmbed = new EmbedBuilder()
-                    .setColor('#FFD700')
-                    .setTitle('⏰ Time\'s Up!')
-                    .setDescription(resultDescription)
-                    .setTimestamp();
-                
-                await channel.send({ embeds: [resultEmbed] });
-                
-                // Update stats for correct answers
-                for (const [userId, answer] of game.participants) {
-                    if (answer === question.correct) {
-                        await updateGameStats(userId, channel.guild.id, 'trivia', 1);
-                    }
-                }
-                
-                activeGames.delete(gameId);
-            }
-        }, 30000);
-
-        return {
-            success: true,
-            message: 'Trivia question sent! Players have 30 seconds to answer.'
-        };
-    } catch (error) {
-        activeGames.delete(channel.id);
-        console.error('Error starting trivia:', error);
-        return {
-            success: false,
-            error: error.message
-        };
-    }
+    // Always use session mode for consistency (even for 1 question)
+    return startTriviaSession(channel, { ...options, questionCount });
 }
 
 /**
@@ -348,10 +174,17 @@ async function startTriviaSession(channel, options = {}) {
                 error: 'A game is already in progress in this channel!'
             };
         }
+        
+        // Check if bot has permission to manage messages (for deletion)
+        const botMember = channel.guild.members.me;
+        const canDeleteMessages = channel.permissionsFor(botMember)?.has('ManageMessages');
+        if (!canDeleteMessages) {
+            console.warn('Bot does not have ManageMessages permission in this channel - message cleanup disabled');
+        }
 
         const questionCount = Math.min(options.questionCount || 5, 10);
         const category = options.category || 'general';
-        const difficulty = options.difficulty || 'medium';
+        const difficulty = options.difficulty || 'hard'; // Default to hard for more challenge
         const sessionScores = new Map(); // Track scores across questions
         const messagesToDelete = []; // Track messages to clean up
         
@@ -376,22 +209,28 @@ async function startTriviaSession(channel, options = {}) {
         // Wait before starting
         await new Promise(resolve => setTimeout(resolve, 5000));
         
-        // Delete the start message
-        try {
-            await startMsg.delete();
-        } catch (err) {}
+        // Delete the start message if we have permission
+        if (canDeleteMessages) {
+            try {
+                await startMsg.delete();
+            } catch (err) {
+                console.error('Could not delete start message:', err.message);
+            }
+        }
         
         // Run through questions
         for (let i = 0; i < questionCount; i++) {
             // Check if session was cancelled
             if (!activeGames.has(channel.id)) break;
             
-            // Clear old messages from previous question
-            if (messagesToDelete.length > 0) {
+            // Clear old messages from previous question (only if we have permission)
+            if (messagesToDelete.length > 0 && canDeleteMessages) {
                 for (const msg of messagesToDelete) {
                     try {
                         await msg.delete();
-                    } catch (err) {}
+                    } catch (err) {
+                        console.error(`Failed to delete message: ${err.message}`);
+                    }
                 }
                 messagesToDelete.length = 0; // Clear the array
             }
@@ -526,12 +365,16 @@ async function startTriviaSession(channel, options = {}) {
             }
         }
         
-        // Clean up remaining messages before showing final results
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        for (const msg of messagesToDelete) {
-            try {
-                await msg.delete();
-            } catch (err) {}
+        // Clean up remaining messages before showing final results (if we have permission)
+        if (canDeleteMessages) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            for (const msg of messagesToDelete) {
+                try {
+                    await msg.delete();
+                } catch (err) {
+                    console.error('Could not delete message:', err.message);
+                }
+            }
         }
         
         // Show final results
