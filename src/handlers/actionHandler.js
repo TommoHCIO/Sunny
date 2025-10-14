@@ -1131,9 +1131,12 @@ class ActionHandler {
     async createEmoji(guild, action) {
         const { emojiName, emojiUrl, roles } = action;
 
+        console.log('[DEBUG] createEmoji called with:', { emojiName, emojiUrl, roles });
+
         try {
             // Check if the file is a video or image URL that needs processing
             let fileToUpload = emojiUrl;
+            console.log('[DEBUG] isVideoUrl check:', videoService.isVideoUrl(emojiUrl));
 
             if (videoService.isVideoUrl(emojiUrl)) {
                 this.log('🎬', `Converting MP4 to GIF for animated emoji: ${emojiName}`);

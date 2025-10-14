@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"{'messages': [{'id': '1427559352100978749', 'author': '.Sunny', 'author_id': '1425557080764579971', 'content': '', 'timestamp': '2025-10-14T07:31:12.311000+00:00', 'channel_id': '1425938118556782693', 'channel_name': '🧪-𝒕𝒆𝒔𝒕𝒔', 'guild_id': '1394732066188431461', 'guild_name': 'The Nook'}]}"}]}}
