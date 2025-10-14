@@ -509,7 +509,40 @@ client.on('interactionCreate', async (interaction) => {
         }
         
         // Handle game interaction buttons
-        if (customId.startsWith('rps_')) {
+        if (customId.startsWith('trivia_')) {
+            // Trivia game answer button
+            const parts = customId.split('_');
+            const answer = parts[1]; // A, B, C, or D
+            const gameId = parts.slice(2).join('_'); // Rest is game ID
+            
+            // Find the game in activeGames
+            const game = gameService.activeGames.get(gameId);
+            
+            if (!game || game.type !== 'trivia' || game.ended) {
+                await interaction.reply({ content: '❌ This trivia question has already ended!', ephemeral: true });
+                return;
+            }
+            
+            // Check if user already answered
+            if (game.participants.has(interaction.user.id)) {
+                await interaction.reply({ content: '❌ You have already answered this question!', ephemeral: true });
+                return;
+            }
+            
+            // Record the answer
+            const answerIndex = ['A', 'B', 'C', 'D'].indexOf(answer);
+            game.participants.set(interaction.user.id, answerIndex);
+            
+            // Check if answer is correct
+            const isCorrect = answerIndex === game.question.correct;
+            const emoji = isCorrect ? '✅' : '❌';
+            const message = isCorrect 
+                ? `${emoji} Correct! You answered **${answer}**` 
+                : `${emoji} Incorrect! You answered **${answer}**`;
+            
+            await interaction.reply({ content: message, ephemeral: true });
+        }
+        else if (customId.startsWith('rps_')) {
             // Rock Paper Scissors game
             const parts = customId.split('_');
             const choice = parts[1]; // rock, paper, or scissors

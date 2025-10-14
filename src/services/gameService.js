@@ -105,6 +105,9 @@ async function startTrivia(channel, options = {}) {
         // Select a random question
         const question = filteredQuestions[Math.floor(Math.random() * filteredQuestions.length)];
 
+        // Create unique game ID
+        const gameId = `trivia_${channel.id}_${Date.now()}`;
+        
         // Create embed with question
         const embed = new EmbedBuilder()
             .setColor('#00CED1')
@@ -119,27 +122,105 @@ async function startTrivia(channel, options = {}) {
             )
             .setFooter({ text: `Category: ${question.category} | You have 30 seconds to answer!` });
 
-        await channel.send({ embeds: [embed] });
+        // Create answer buttons
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`trivia_A_${gameId}`)
+                    .setLabel('A')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId(`trivia_B_${gameId}`)
+                    .setLabel('B')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId(`trivia_C_${gameId}`)
+                    .setLabel('C')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId(`trivia_D_${gameId}`)
+                    .setLabel('D')
+                    .setStyle(ButtonStyle.Primary)
+            );
 
-        // Mark game as active
-        activeGames.set(channel.id, {
+        const triviaMessage = await channel.send({ embeds: [embed], components: [row] });
+
+        // Mark game as active with more details
+        activeGames.set(gameId, {
             type: 'trivia',
+            channelId: channel.id,
             question: question,
-            startTime: Date.now()
+            messageId: triviaMessage.id,
+            startTime: Date.now(),
+            participants: new Map(), // Track who answered and what
+            ended: false
         });
 
-        // Send the answer after 30 seconds
+        // End the game after 30 seconds
         setTimeout(async () => {
-            if (activeGames.has(channel.id)) {
+            const game = activeGames.get(gameId);
+            if (game && !game.ended) {
+                game.ended = true;
+                
                 const correctAnswer = question.answers[question.correct];
+                const correctLetter = ['A', 'B', 'C', 'D'][question.correct];
+                
+                // Disable all buttons
+                const disabledRow = new ActionRowBuilder()
+                    .addComponents(
+                        row.components.map(button => 
+                            ButtonBuilder.from(button).setDisabled(true)
+                        )
+                    );
+                
+                // Update original message to disable buttons
+                try {
+                    await triviaMessage.edit({ components: [disabledRow] });
+                } catch (err) {
+                    console.error('Could not disable trivia buttons:', err);
+                }
+                
+                // Build results message
+                let resultDescription = `The correct answer was: **${correctLetter}. ${correctAnswer}**\n\n`;
+                
+                if (game.participants.size > 0) {
+                    const correctUsers = [];
+                    const incorrectUsers = [];
+                    
+                    for (const [userId, answer] of game.participants) {
+                        if (answer === question.correct) {
+                            correctUsers.push(`<@${userId}>`);
+                        } else {
+                            incorrectUsers.push(`<@${userId}>`);
+                        }
+                    }
+                    
+                    if (correctUsers.length > 0) {
+                        resultDescription += `✅ **Correct:** ${correctUsers.join(', ')}\n`;
+                    }
+                    if (incorrectUsers.length > 0) {
+                        resultDescription += `❌ **Incorrect:** ${incorrectUsers.join(', ')}\n`;
+                    }
+                } else {
+                    resultDescription += `Nobody answered in time!`;
+                }
+                
                 const resultEmbed = new EmbedBuilder()
                     .setColor('#FFD700')
                     .setTitle('⏰ Time\'s Up!')
-                    .setDescription(`The correct answer was: **${['A', 'B', 'C', 'D'][question.correct]}. ${correctAnswer}**`)
+                    .setDescription(resultDescription)
                     .setTimestamp();
                 
                 await channel.send({ embeds: [resultEmbed] });
-                activeGames.delete(channel.id);
+                
+                // Update stats for correct answers
+                for (const [userId, answer] of game.participants) {
+                    if (answer === question.correct) {
+                        await updateGameStats(userId, channel.guild.id, 'trivia', 1);
+                    }
+                }
+                
+                activeGames.delete(gameId);
             }
         }, 30000);
 
