@@ -138,10 +138,57 @@ class ContextService {
     }
     
     /**
+     * Fetch recent messages from Discord channel
+     * Fetches up to 50 recent messages to provide conversation history
+     * @param {import('discord.js').TextChannel} channel - Discord channel
+     * @returns {Promise<Array<Object>>} Array of message objects
+     */
+    async fetchDiscordHistory(channel) {
+        try {
+            // Fetch up to 50 recent messages from Discord
+            const messages = await channel.messages.fetch({ limit: 50 });
+            
+            const history = [];
+            messages.forEach(msg => {
+                // Skip bot's own messages or very old messages
+                if (msg.author.bot && msg.author.id === channel.client.user.id) return;
+                
+                // Extract attachment info
+                const attachments = [];
+                if (msg.attachments && msg.attachments.size > 0) {
+                    msg.attachments.forEach(att => {
+                        attachments.push({
+                            name: att.name,
+                            url: att.url,
+                            contentType: att.contentType || 'unknown',
+                            size: att.size
+                        });
+                    });
+                }
+                
+                history.push({
+                    author: msg.author.username,
+                    authorId: msg.author.id,
+                    content: msg.content,
+                    timestamp: msg.createdTimestamp,
+                    isSunny: msg.author.bot,
+                    attachments: attachments
+                });
+            });
+            
+            // Sort by timestamp (oldest first)
+            return history.sort((a, b) => a.timestamp - b.timestamp);
+        } catch (error) {
+            console.error('Error fetching Discord message history:', error);
+            return [];
+        }
+    }
+
+    /**
      * Build context-aware prompt for AI agent
      * 
      * Creates a formatted prompt including:
-     * - Recent conversation history with user IDs
+     * - Recent conversation history with user IDs (fetched from Discord)
      * - Reply context if message is a reply
      * - Current message details
      * - Instructions for AI response
@@ -160,7 +207,19 @@ class ContextService {
      * const response = await aiAgent.process(prompt);
      */
     async buildContextPrompt(channelId, currentMessage, replyContext = null) {
-        const context = await this.getContext(channelId);
+        // First try to get cached context
+        let context = await this.getContext(channelId);
+        
+        // If context is empty or minimal, fetch from Discord
+        if (!context || context.length < 5) {
+            console.log(`📜 Context empty or minimal (${context?.length || 0} msgs), fetching Discord history...`);
+            const discordHistory = await this.fetchDiscordHistory(currentMessage.channel);
+            if (discordHistory.length > 0) {
+                console.log(`✅ Fetched ${discordHistory.length} messages from Discord history`);
+                // Use Discord history as context
+                context = discordHistory.slice(-this.maxMessages);
+            }
+        }
 
         let prompt = '';
 

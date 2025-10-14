@@ -44,49 +44,43 @@ function initialize(client) {
 }
 
 /**
- * Generate a trivia question using AI or question bank
+ * Generate a trivia question using AI
+ * Always uses AI generation for unlimited variety and no repeats
  * @param {string} category - Category for the question
  * @param {string} difficulty - Difficulty level (easy, medium, hard)
- * @param {boolean} useAI - Whether to use AI generation (default: false, uses question bank)
  * @returns {Promise<Object>} Generated trivia question
  */
-async function generateTriviaQuestion(category = 'general', difficulty = 'medium', useAI = false) {
-    // If not using AI, try to get from question bank first
-    if (!useAI) {
-        try {
-            const question = getRandomQuestion(difficulty, category);
-            if (question) {
-                console.log(`[GameService] Using question from bank: ${difficulty}/${category}`);
-                return question;
-            }
-            // If no question found in bank, fall through to AI generation
-            console.log(`[GameService] No question found in bank for ${difficulty}/${category}, using AI`);
-        } catch (error) {
-            console.error('[GameService] Error getting question from bank:', error);
-            // Fall through to AI generation
-        }
-    }
-    
-    // AI generation (original code)
+async function generateTriviaQuestion(category = 'general', difficulty = 'medium') {
+    // Always use AI generation for unlimited variety and no repeats
     try {
         // Map categories to more specific topics for better questions
         const categoryPrompts = {
-            'general': 'general knowledge',
-            'science': 'science (physics, chemistry, biology, astronomy)',
-            'history': 'world history',
-            'geography': 'world geography',
-            'entertainment': 'movies, TV shows, music, and entertainment',
-            'sports': 'sports and athletics',
-            'art': 'art, artists, and art history',
-            'animals': 'animals and wildlife',
-            'vehicles': 'cars, planes, trains, and vehicles',
-            'comics': 'comic books and superheroes',
-            'gadgets': 'technology and gadgets',
-            'anime': 'anime and manga',
-            'cartoons': 'cartoons and animation'
+            'general': 'general knowledge across various topics',
+            'science': 'science (physics, chemistry, biology, astronomy, mathematics)',
+            'history': 'world history, historical events, and important figures',
+            'geography': 'world geography, countries, capitals, landmarks, and physical features',
+            'entertainment': 'movies, TV shows, music, celebrities, and pop culture',
+            'sports': 'sports, athletics, championships, and famous athletes',
+            'art': 'art, famous artists, art movements, paintings, and sculptures',
+            'music': 'music, musicians, bands, albums, and musical theory',
+            'literature': 'books, authors, poetry, and literary works',
+            'technology': 'technology, computers, internet, and innovations',
+            'food': 'cuisine, cooking, ingredients, and culinary traditions',
+            'nature': 'nature, ecosystems, plants, and natural phenomena',
+            'animals': 'animals, wildlife, zoology, and animal behavior',
+            'vehicles': 'cars, planes, trains, boats, and transportation',
+            'comics': 'comic books, superheroes, manga, and graphic novels',
+            'games': 'video games, board games, and gaming history',
+            'movies': 'cinema, films, directors, and movie history',
+            'anime': 'anime, manga, and Japanese animation',
+            'mythology': 'mythology, legends, and ancient stories'
         };
 
+        // Add randomization to ensure unique questions each time
+        const uniqueSeed = Date.now() + Math.random();
+        
         const prompt = `Generate a ${difficulty} trivia question about ${categoryPrompts[category] || category}.
+Generation seed: ${uniqueSeed}
 
 Return ONLY a JSON object in this exact format (no markdown, no extra text):
 {
@@ -102,11 +96,12 @@ Rules:
 - Make exactly 4 answer options
 - The correct answer index (0-3) should be randomized
 - All answers should be highly plausible to make it challenging
-- ${difficulty === 'easy' ? 'Make the question accessible but not obvious, avoiding overly simple facts' : difficulty === 'hard' ? 'Make the question very challenging, requiring specialized knowledge or careful thinking. Include subtle details, specific dates, lesser-known facts, or complex concepts' : 'Make the question moderately challenging, requiring good general knowledge'}
+- ${difficulty === 'easy' ? 'Make the question accessible but interesting - something most people could figure out with general knowledge, but not completely obvious' : difficulty === 'hard' ? 'Make the question very challenging, requiring specialized knowledge or careful thinking. Include subtle details, specific dates, lesser-known facts, or complex concepts. This should stump most people!' : 'Make the question moderately challenging, requiring good general knowledge or some reasoning'}
 - The question should be factual and verifiable
 - Don't use "all of the above" or "none of the above" as options
-- Avoid questions everyone would know (like "What is 2+2?" or "Capital of France")
-- Focus on interesting, lesser-known facts that educated adults might find challenging`;
+- Avoid overly simple questions that everyone would know immediately
+- Focus on interesting, engaging facts that make players think
+- IMPORTANT: Generate a completely UNIQUE question - do not repeat common trivia questions`;
 
         const response = await anthropic.messages.create({
             model: 'claude-3-haiku-20240307',
