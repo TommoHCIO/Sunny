@@ -356,7 +356,7 @@ async function processRPSChoice(interaction, gameId, choice) {
         ) {
             result = 'You win! 🎉';
             // Update user stats
-            await updateUserGameStats(interaction.user.id, 'rps_wins', 1);
+            await updateGameStats(interaction.user.id, interaction.guild.id, 'rps', 1);
         } else {
             result = 'Sunny wins! 🤖';
         }

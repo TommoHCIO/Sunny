@@ -513,9 +513,14 @@ client.on('interactionCreate', async (interaction) => {
             // Rock Paper Scissors game
             const parts = customId.split('_');
             const choice = parts[1]; // rock, paper, or scissors
-            const gameId = parts[2]; // game ID
+            // Game ID is everything after the choice (to handle timestamps with underscores)
+            const gameId = parts.slice(2).join('_');
             
+            console.log(`RPS Button clicked: choice=${choice}, gameId=${gameId}`);
             const game = gameService.activeGames.get(gameId);
+            console.log(`Game found:`, game ? `yes, type=${game.type}` : 'no');
+            console.log(`Active games:`, Array.from(gameService.activeGames.keys()));
+            
             if (!game || game.type !== 'rps') {
                 await interaction.reply({ content: '❌ Game has expired or not found.', ephemeral: true });
                 return;
