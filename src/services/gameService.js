@@ -131,7 +131,7 @@ Rules:
             console.log('📡 Calling Z.AI API...');
             const response = await aiClient.chat.completions.create({
                 model: 'glm-4.6', // Most capable model for complex JSON generation
-                max_tokens: 800,
+                max_tokens: 2000, // Increased to handle reasoning_content + final answer
                 temperature: 0.7,
                 messages: [{
                     role: 'system',
@@ -146,7 +146,8 @@ Rules:
                 choiceCount: response.choices?.length,
                 hasContent: !!response.choices?.[0]?.message?.content
             });
-            content = response.choices[0].message.content;
+            // GLM-4.6 may use 'reasoning_content' for thinking mode
+            content = response.choices[0].message.content || response.choices[0].message.reasoning_content || '';
             
             // Check for empty response from Z.AI
             if (!content || content.trim() === '') {
@@ -154,6 +155,8 @@ Rules:
                 console.error('Full response:', JSON.stringify(response, null, 2));
                 throw new Error('Z.AI returned empty response');
             }
+            
+            console.log('🧠 Using', response.choices[0].message.content ? 'content' : 'reasoning_content');
         } else {
             // Anthropic
             console.log('📡 Calling Anthropic API...');
@@ -175,11 +178,31 @@ Rules:
         // Try to extract JSON from the response
         let triviaData;
         try {
-            // Remove any markdown code blocks if present
-            const jsonStr = content.replace(/```json\n?|```\n?/g, '').trim();
+            let jsonStr = content;
+            
+            // Try to extract JSON from markdown code blocks
+            const jsonMatch = content.match(/```json\s*([\s\S]*?)```/);
+            if (jsonMatch) {
+                jsonStr = jsonMatch[1].trim();
+                console.log('🔍 Extracted from ```json block');
+            } else {
+                // Try to find standalone JSON object (for reasoning_content)
+                const objectMatch = content.match(/\{[\s\S]*?"question"[\s\S]*?\}/); 
+                if (objectMatch) {
+                    jsonStr = objectMatch[0];
+                    console.log('🔍 Extracted JSON object from reasoning');
+                } else {
+                    // Fallback: remove markdown and try
+                    jsonStr = content.replace(/```json\n?|```\n?/g, '').trim();
+                }
+            }
+            
+            console.log('📝 JSON to parse:', jsonStr.substring(0, 300) + '...');
             triviaData = JSON.parse(jsonStr);
         } catch (parseError) {
-            console.error('Failed to parse AI response:', content);
+            console.error('❌ Failed to parse AI response');
+            console.error('Parse error:', parseError.message);
+            console.error('Content preview:', content.substring(0, 500));
             throw new Error('Failed to generate valid trivia question');
         }
 
