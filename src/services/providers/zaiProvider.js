@@ -154,21 +154,24 @@ User message: ${userMessage}`
 
     let loopCount = 0;
     const startTime = Date.now();
-    const maxTimeMs = 420000; // 7 minutes
-    const maxLoops = 50;
+    const maxLoops = 100; // Increased from 50 - no time limit, only iteration limit
+    let lastProgressLog = Date.now();
 
     try {
         // AGENTIC LOOP - OpenAI/Z.AI style
+        // NO TIME LIMIT - only iteration limit to prevent infinite loops
         while (loopCount < maxLoops) {
             loopCount++;
             const elapsedTime = Date.now() - startTime;
-            console.log(`🔄 [Z.AI] Agent loop iteration ${loopCount} (${(elapsedTime/1000).toFixed(1)}s elapsed)`);
-
-            // Check time limit
-            if (elapsedTime > maxTimeMs) {
-                console.error(`⏱️ Hit time limit (${maxTimeMs/1000}s) after ${loopCount} iterations`);
-                return "I'm taking longer than expected on this! 🍂 Let me try a different approach - could you break this into smaller questions?";
+            
+            // Log progress every 10 seconds to detect hangs (Render visibility)
+            if (Date.now() - lastProgressLog > 10000) {
+                console.log(`🔄 [Z.AI] Agent loop iteration ${loopCount} (${(elapsedTime/1000).toFixed(1)}s elapsed)`);
+                lastProgressLog = Date.now();
             }
+
+            // Hang detection: warn if single iteration takes >60s
+            const iterationStart = Date.now();
 
             // Apply rate limiting
             await anthropicRateLimiter.removeTokens(1);
@@ -195,6 +198,12 @@ User message: ${userMessage}`
 
             const choice = response.choices[0];
             const finishReason = choice.finish_reason;
+
+            // Hang detection: warn if iteration took >60s
+            const iterationTime = (Date.now() - iterationStart) / 1000;
+            if (iterationTime > 60) {
+                console.warn(`⚠️  [HANG_DETECTION] Iteration ${loopCount} took ${iterationTime.toFixed(1)}s (>60s threshold)`);
+            }
 
             console.log(`📊 Finish reason: ${finishReason}`);
 

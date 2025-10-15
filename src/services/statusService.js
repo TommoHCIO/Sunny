@@ -47,14 +47,16 @@ const STATUS_THEMES = [
  * - Real-time elapsed time display
  * - Asymptotic progress (approaches 100% but never reaches)
  * - Auto-cleanup on completion
+ * - Enhanced with AI model information
  */
 class StatusTracker {
-    constructor(statusMessage, startTime) {
+    constructor(statusMessage, startTime, modelInfo) {
         this.statusMessage = statusMessage;  // Discord message object
         this.startTime = startTime;          // Timestamp when started
         this.intervalId = null;              // setInterval ID for cleanup
         this.updateCount = 0;                // Tracks rotation through themes
         this.stopped = false;                // Prevents updates after stop
+        this.modelInfo = modelInfo || null;  // AI model being used
     }
 
     /**
@@ -108,9 +110,15 @@ class StatusTracker {
         const progress = this.calculateProgress(elapsed);
         const progressBar = this.buildProgressBar(progress);
 
+        // Build description with model info if available
+        let description = `${theme.description}\n\n${progressBar}`;
+        if (this.modelInfo) {
+            description += `\n\n*Using ${this.modelInfo}*`;
+        }
+
         return new EmbedBuilder()
             .setTitle(theme.title)
-            .setDescription(`${theme.description}\n\n${progressBar}`)
+            .setDescription(description)
             .setColor(theme.color)
             .setFooter({ text: `⏱️ Elapsed: ${elapsed.toFixed(1)}s` })
             .setTimestamp();
@@ -170,22 +178,28 @@ class StatusTracker {
  * Start visual status tracking
  *
  * Creates initial status embed and starts interval timer
- * for updates every 2.5 seconds.
+ * for updates every 1.5 seconds (optimized for better UX).
  *
  * @param {Message} message - Discord message to reply to
+ * @param {string} modelInfo - Optional AI model information to display
  * @returns {Promise<StatusTracker>} Tracker instance with stop() method
  *
  * @example
- * const statusTracker = await statusService.start(message);
+ * const statusTracker = await statusService.start(message, 'Z.AI GLM-4.6');
  * // ... do work ...
  * await statusTracker.stop(); // Clean up
  */
-async function start(message) {
+async function start(message, modelInfo = null) {
     try {
         // Create initial embed with first theme
+        let initialDescription = `${STATUS_THEMES[0].description}\n\n░░░░░░░░░░ 0%`;
+        if (modelInfo) {
+            initialDescription += `\n\n*Using ${modelInfo}*`;
+        }
+        
         const initialEmbed = new EmbedBuilder()
             .setTitle(STATUS_THEMES[0].title)
-            .setDescription(`${STATUS_THEMES[0].description}\n\n░░░░░░░░░░ 0%`)
+            .setDescription(initialDescription)
             .setColor(STATUS_THEMES[0].color)
             .setFooter({ text: '⏱️ Elapsed: 0.0s' })
             .setTimestamp();
@@ -193,13 +207,14 @@ async function start(message) {
         // Send status message
         const statusMessage = await message.channel.send({ embeds: [initialEmbed] });
 
-        // Create tracker
-        const tracker = new StatusTracker(statusMessage, Date.now());
+        // Create tracker with model info
+        const tracker = new StatusTracker(statusMessage, Date.now(), modelInfo);
 
-        // Start interval updates every 2.5 seconds
+        // Start interval updates every 1.5 seconds (faster updates = better UX)
+        // Research shows 1-2 second updates are optimal for loading indicators
         tracker.intervalId = setInterval(() => {
             tracker.updateStatus();
-        }, 2500);
+        }, 1500);
 
         return tracker;
     } catch (error) {
