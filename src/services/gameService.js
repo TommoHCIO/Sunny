@@ -14,13 +14,21 @@ const {
 } = require('discord.js');
 // Removed discord-trivia dependency - using custom implementation
 const UserMemory = require('../models/UserMemory');
-const Anthropic = require('@anthropic-ai/sdk');
+const OpenAI = require('openai');
 const { getRandomQuestion, getRandomQuestions } = require('../data/triviaQuestions');
 
-// Initialize Anthropic client for generating trivia questions
-const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY
-});
+// Initialize AI client for generating trivia questions (uses Z.AI or Anthropic)
+const aiClient = process.env.AI_PROVIDER === 'zai'
+    ? new OpenAI({
+        apiKey: process.env.ZAI_API_KEY,
+        baseURL: process.env.ZAI_BASE_URL || 'https://api.z.ai/api/paas/v4/'
+    })
+    : null; // Will use Anthropic SDK if needed
+
+const Anthropic = !aiClient ? require('@anthropic-ai/sdk') : null;
+const anthropic = !aiClient ? new Anthropic({
+    apiKey: process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY
+}) : null;
 
 // Store Discord client instance (will be set on initialization)
 let discordClient = null;
@@ -108,18 +116,34 @@ Rules:
 - Focus on interesting, engaging facts that make players think
 - IMPORTANT: Generate a completely UNIQUE question - do not repeat common trivia questions`;
 
-        const response = await anthropic.messages.create({
-            model: 'claude-3-haiku-20240307',
-            max_tokens: 500,
-            temperature: 0.8,
-            messages: [{
-                role: 'user',
-                content: prompt
-            }]
-        });
+        let content;
 
-        // Parse the response
-        const content = response.content[0].text;
+        // Use Z.AI or Anthropic based on what's configured
+        if (aiClient) {
+            // Z.AI using OpenAI SDK
+            const response = await aiClient.chat.completions.create({
+                model: 'glm-4.5-air', // Fast and cheap for trivia
+                max_tokens: 500,
+                temperature: 0.8,
+                messages: [{
+                    role: 'user',
+                    content: prompt
+                }]
+            });
+            content = response.choices[0].message.content;
+        } else {
+            // Anthropic
+            const response = await anthropic.messages.create({
+                model: 'claude-3-haiku-20240307',
+                max_tokens: 500,
+                temperature: 0.8,
+                messages: [{
+                    role: 'user',
+                    content: prompt
+                }]
+            });
+            content = response.content[0].text;
+        }
         
         // Try to extract JSON from the response
         let triviaData;
