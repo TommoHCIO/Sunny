@@ -288,6 +288,24 @@ function getMessageTools(guild) {
             }
         },
         {
+            name: "get_channel_messages",
+            description: "Fetch recent messages from a channel, including full embed data (title, description, fields, colors, images, etc.). Returns up to 100 messages with complete information about embeds, reactions, and attachments. Use this to view existing announcements, embeds, or message history.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    channelName: {
+                        type: "string",
+                        description: "Channel name or ID to fetch messages from"
+                    },
+                    limit: {
+                        type: "number",
+                        description: "Number of messages to fetch (1-100, default: 50)"
+                    }
+                },
+                required: ["channelName"]
+            }
+        },
+        {
             name: "send_button_message",
             description: "Send a message with interactive buttons. Useful for creating ticket panels, polls, or any interactive UI. Buttons can have custom IDs and labels. Supports up to 5 buttons per row and 5 rows max.",
             input_schema: {

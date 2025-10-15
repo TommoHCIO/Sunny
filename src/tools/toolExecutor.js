@@ -224,6 +224,9 @@ async function execute(toolName, input, guild, author) {
             case 'purge_messages':
                 return await purgeMessages(guild, input);
 
+            case 'get_channel_messages':
+                return await getChannelMessages(guild, input);
+
             // ===== REACTION MANAGEMENT =====
             case 'add_reaction':
                 return await addReaction(guild, input);
@@ -1245,6 +1248,77 @@ async function purgeMessages(guild, input) {
         };
     } catch (error) {
         return { success: false, error: `Failed to purge messages: ${error.message}` };
+    }
+}
+
+async function getChannelMessages(guild, input) {
+    try {
+        const channel = findChannel(guild, input.channelName);
+
+        if (!channel) {
+            return { success: false, error: `Channel "${input.channelName}" not found. Provide either the channel name or channel ID.` };
+        }
+
+        const limit = Math.min(input.limit || 50, 100);
+        const messages = await retryWithBackoff(
+            () => channel.messages.fetch({ limit }),
+            {
+                maxAttempts: 3,
+                baseDelay: 1000,
+                operationName: 'Fetch Channel Messages'
+            }
+        );
+
+        const messageList = messages.map(m => ({
+            id: m.id,
+            author: m.author.username,
+            author_id: m.author.id,
+            author_bot: m.author.bot,
+            content: m.content,
+            timestamp: m.createdAt.toISOString(),
+            embeds: m.embeds.map(e => ({
+                title: e.title,
+                description: e.description,
+                color: e.color ? `#${e.color.toString(16).padStart(6, '0')}` : null,
+                fields: e.fields.map(f => ({
+                    name: f.name,
+                    value: f.value,
+                    inline: f.inline
+                })),
+                footer: e.footer ? { text: e.footer.text, icon: e.footer.iconURL } : null,
+                image: e.image?.url || null,
+                thumbnail: e.thumbnail?.url || null,
+                author: e.author ? {
+                    name: e.author.name,
+                    iconURL: e.author.iconURL,
+                    url: e.author.url
+                } : null,
+                url: e.url || null,
+                timestamp: e.timestamp || null
+            })),
+            attachments: m.attachments.map(a => ({
+                name: a.name,
+                url: a.url,
+                size: a.size,
+                contentType: a.contentType
+            })),
+            reactions: m.reactions.cache.map(r => ({
+                emoji: r.emoji.name || r.emoji.toString(),
+                count: r.count
+            })),
+            pinned: m.pinned,
+            edited: m.editedAt ? m.editedAt.toISOString() : null
+        }));
+
+        return {
+            success: true,
+            messages: messageList,
+            total: messageList.length,
+            channel: channel.name,
+            channel_id: channel.id
+        };
+    } catch (error) {
+        return { success: false, error: `Failed to fetch channel messages: ${error.message}` };
     }
 }
 
