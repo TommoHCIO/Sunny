@@ -2,75 +2,127 @@
 const { EmbedBuilder } = require('discord.js');
 
 /**
- * Status Service - Visual Real-Time Status Indicator
+ * Status Service - Real-Time Event-Driven Status Indicator
  *
- * Creates beautiful, autumn-themed embeds that update every 2.5 seconds
- * showing processing progress with rotating themes, colors, and progress bars.
+ * Creates beautiful, autumn-themed embeds that update every 1.5 seconds
+ * showing REAL operations happening in the AI agent (model selection, API calls, tool execution).
+ *
+ * Uses EventEmitter to receive real-time updates from the AI provider and displays
+ * truthful, detailed progress instead of fake rotating themes.
  */
-
-// Autumn-themed status progression with emoji, descriptions, colors
-const STATUS_THEMES = [
-    {
-        title: "🍂 Gathering Thoughts",
-        description: "Sunny is collecting autumn leaves of wisdom...",
-        color: 0xe67e22  // Vibrant Orange
-    },
-    {
-        title: "☕ Brewing Response",
-        description: "Steeping your request like a warm cup of tea...",
-        color: 0xc27c0e  // Dark Gold
-    },
-    {
-        title: "🍁 Processing Request",
-        description: "Rustling through the knowledge trees...",
-        color: 0xa84300  // Dark Orange
-    },
-    {
-        title: "🧡 Crafting Reply",
-        description: "Weaving words with cozy autumn magic...",
-        color: 0xf1c40f  // Bright Gold
-    },
-    {
-        title: "🌻 Almost Ready",
-        description: "Just a few more sunflower seeds of thought...",
-        color: 0xfee75c  // Warm Yellow
-    }
-];
 
 /**
- * StatusTracker - Manages visual status embed updates
+ * StatusTracker - Manages real-time event-driven status embed updates
  *
  * Features:
- * - Rotating autumn-themed messages
- * - Unicode progress bar animation
- * - Color cycling through autumn palette
+ * - Real-time event updates from AI provider
+ * - Shows actual operations (model selection, API calls, tool execution)
+ * - Unicode progress bar based on actual iterations
+ * - Autumn color palette for different event types
  * - Real-time elapsed time display
- * - Asymptotic progress (approaches 100% but never reaches)
  * - Auto-cleanup on completion
- * - Enhanced with AI model information
  */
 class StatusTracker {
-    constructor(statusMessage, startTime, modelInfo) {
+    constructor(statusMessage, startTime, eventEmitter) {
         this.statusMessage = statusMessage;  // Discord message object
         this.startTime = startTime;          // Timestamp when started
         this.intervalId = null;              // setInterval ID for cleanup
-        this.updateCount = 0;                // Tracks rotation through themes
+        this.updateCount = 0;                // Tracks number of updates
         this.stopped = false;                // Prevents updates after stop
-        this.modelInfo = modelInfo || null;  // AI model being used
+        this.eventEmitter = eventEmitter;    // EventEmitter for real-time updates
+
+        // Real-time status state - updated by events
+        this.currentEvent = {
+            type: 'initializing',
+            title: '🎬 Initializing',
+            description: 'Starting AI agent...',
+            progress: 0,
+            details: null
+        };
+
+        // Listen to real-time events if emitter provided
+        if (this.eventEmitter) {
+            this.setupEventListeners();
+        }
     }
 
     /**
-     * Calculate progress percentage (asymptotic approach)
+     * Setup event listeners for real-time status updates
      *
-     * Uses exponential formula: 100 * (1 - e^(-t/10))
-     * This creates smooth progress that approaches 100% but caps at 95%
-     *
-     * @param {number} elapsedSeconds - Time elapsed since start
-     * @returns {number} Progress percentage (0-95)
+     * Listens to events from the AI provider and updates currentEvent state.
+     * The next updateStatus() call (every 1.5s) will display the latest event.
      */
-    calculateProgress(elapsedSeconds) {
-        const progress = Math.min(95, Math.floor(100 * (1 - Math.exp(-elapsedSeconds / 10))));
-        return progress;
+    setupEventListeners() {
+        // Model selection event
+        this.eventEmitter.on('model_selected', (data) => {
+            const modelDisplay = data.model === 'glm-4.5-air'
+                ? 'GLM-4.5-Air (Efficient)'
+                : 'GLM-4.6 (Advanced)';
+
+            this.currentEvent = {
+                type: 'model_selected',
+                title: '🤖 AI Model Selected',
+                description: `Using ${modelDisplay}`,
+                progress: 10,
+                details: data.reasoning
+            };
+        });
+
+        // API call start event
+        this.eventEmitter.on('api_call_start', (data) => {
+            const progressPct = Math.min(95, 20 + (data.iteration / data.maxIterations) * 70);
+            this.currentEvent = {
+                type: 'api_call',
+                title: `📡 API Call #${data.iteration}`,
+                description: 'Requesting Z.AI GLM response...',
+                progress: Math.floor(progressPct),
+                details: `Iteration ${data.iteration}/${data.maxIterations}`
+            };
+        });
+
+        // Tool execution event
+        this.eventEmitter.on('tool_execution', (data) => {
+            const toolIcons = {
+                'list_channels': '📋',
+                'list_roles': '🎭',
+                'create_channel': '➕',
+                'delete_channel': '🗑️',
+                'list_members': '👥',
+                'get_channel_info': 'ℹ️',
+                'send_message': '💬'
+            };
+            const icon = toolIcons[data.toolName] || '🔧';
+
+            this.currentEvent = {
+                type: 'tool_execution',
+                title: `${icon} Executing Tool`,
+                description: `Running: ${data.toolName}`,
+                progress: Math.min(95, 30 + data.iteration * 5),
+                details: `Args: ${JSON.stringify(data.args).substring(0, 60)}...`
+            };
+        });
+
+        // Thinking/processing event
+        this.eventEmitter.on('thinking', () => {
+            this.currentEvent = {
+                type: 'thinking',
+                title: '💭 Processing Response',
+                description: 'Analyzing results and crafting reply...',
+                progress: 95,
+                details: null
+            };
+        });
+
+        // Completion event
+        this.eventEmitter.on('complete', (data) => {
+            this.currentEvent = {
+                type: 'complete',
+                title: '✅ Complete!',
+                description: `Finished in ${data.totalTime}s`,
+                progress: 100,
+                details: `${data.totalIterations} iterations completed`
+            };
+        });
     }
 
     /**
@@ -93,34 +145,51 @@ class StatusTracker {
     }
 
     /**
-     * Create rich embed with current status
+     * Get color for event type (autumn-themed palette)
+     *
+     * @param {string} eventType - Type of event
+     * @returns {number} Discord color code
+     */
+    getColorForEvent(eventType) {
+        const colors = {
+            'initializing': 0xe67e22,    // Vibrant Orange
+            'model_selected': 0x3498db,  // Blue
+            'api_call': 0x9b59b6,        // Purple
+            'tool_execution': 0xe74c3c,  // Red
+            'thinking': 0x1abc9c,        // Teal
+            'complete': 0x2ecc71         // Green
+        };
+        return colors[eventType] || 0xe67e22;
+    }
+
+    /**
+     * Create rich embed with current real-time status
      *
      * Builds Discord embed with:
-     * - Rotating themed title and description
-     * - Color cycling through autumn palette
-     * - Unicode progress bar
-     * - Elapsed time footer
+     * - Real event-driven title and description
+     * - Color based on event type
+     * - Unicode progress bar from actual operations
+     * - Elapsed time display
      * - Timestamp
      *
      * @returns {EmbedBuilder} Configured embed ready to send
      */
     createEmbed() {
         const elapsed = (Date.now() - this.startTime) / 1000;
-        const theme = STATUS_THEMES[this.updateCount % STATUS_THEMES.length];
-        const progress = this.calculateProgress(elapsed);
-        const progressBar = this.buildProgressBar(progress);
+        const event = this.currentEvent;
+        const progressBar = this.buildProgressBar(event.progress);
 
-        // Build description with model info if available
-        let description = `${theme.description}\n\n${progressBar}`;
-        if (this.modelInfo) {
-            description += `\n\n*Using ${this.modelInfo}*`;
+        // Build description with real event data
+        let description = `${event.description}\n\n${progressBar}`;
+        if (event.details) {
+            description += `\n\n*${event.details}*`;
         }
+        description += `\n⏱️ ${elapsed.toFixed(1)}s elapsed`;
 
         return new EmbedBuilder()
-            .setTitle(theme.title)
+            .setTitle(event.title)
             .setDescription(description)
-            .setColor(theme.color)
-            .setFooter({ text: `⏱️ Elapsed: ${elapsed.toFixed(1)}s` })
+            .setColor(this.getColorForEvent(event.type))
             .setTimestamp();
     }
 
@@ -149,7 +218,7 @@ class StatusTracker {
      * Stop status tracking and delete message
      *
      * Idempotent - safe to call multiple times.
-     * Clears interval timer and deletes status message.
+     * Clears interval timer, removes event listeners, and deletes status message.
      * Handles errors gracefully (already deleted, no permission).
      */
     async stop() {
@@ -160,6 +229,11 @@ class StatusTracker {
         if (this.intervalId) {
             clearInterval(this.intervalId);
             this.intervalId = null;
+        }
+
+        // Remove event listeners
+        if (this.eventEmitter) {
+            this.eventEmitter.removeAllListeners();
         }
 
         // Delete status message
@@ -175,43 +249,39 @@ class StatusTracker {
 }
 
 /**
- * Start visual status tracking
+ * Start real-time event-driven status tracking
  *
  * Creates initial status embed and starts interval timer
- * for updates every 1.5 seconds (optimized for better UX).
+ * for updates every 1.5 seconds. Connects to EventEmitter for real-time updates.
  *
  * @param {Message} message - Discord message to reply to
- * @param {string} modelInfo - Optional AI model information to display
+ * @param {EventEmitter} eventEmitter - Optional EventEmitter for real-time status updates
  * @returns {Promise<StatusTracker>} Tracker instance with stop() method
  *
  * @example
- * const statusTracker = await statusService.start(message, 'Z.AI GLM-4.6');
- * // ... do work ...
+ * const { EventEmitter } = require('events');
+ * const statusEmitter = new EventEmitter();
+ * const statusTracker = await statusService.start(message, statusEmitter);
+ * // ... emit events as work happens ...
  * await statusTracker.stop(); // Clean up
  */
-async function start(message, modelInfo = null) {
+async function start(message, eventEmitter = null) {
     try {
-        // Create initial embed with first theme
-        let initialDescription = `${STATUS_THEMES[0].description}\n\n░░░░░░░░░░ 0%`;
-        if (modelInfo) {
-            initialDescription += `\n\n*Using ${modelInfo}*`;
-        }
-        
+        // Create initial embed
         const initialEmbed = new EmbedBuilder()
-            .setTitle(STATUS_THEMES[0].title)
-            .setDescription(initialDescription)
-            .setColor(STATUS_THEMES[0].color)
-            .setFooter({ text: '⏱️ Elapsed: 0.0s' })
+            .setTitle('🎬 Initializing')
+            .setDescription('Starting AI agent...\n\n░░░░░░░░░░░░░░░░░░░░ 0%\n⏱️ 0.0s elapsed')
+            .setColor(0xe67e22) // Vibrant Orange
             .setTimestamp();
 
         // Send status message
         const statusMessage = await message.channel.send({ embeds: [initialEmbed] });
 
-        // Create tracker with model info
-        const tracker = new StatusTracker(statusMessage, Date.now(), modelInfo);
+        // Create tracker with event emitter
+        const tracker = new StatusTracker(statusMessage, Date.now(), eventEmitter);
 
-        // Start interval updates every 1.5 seconds (faster updates = better UX)
-        // Research shows 1-2 second updates are optimal for loading indicators
+        // Start interval updates every 1.5 seconds
+        // This provides live feedback - embed updates reflect latest events
         tracker.intervalId = setInterval(() => {
             tracker.updateStatus();
         }, 1500);

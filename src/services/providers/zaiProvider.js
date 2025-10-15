@@ -62,8 +62,9 @@ Keep responses concise (2-4 sentences usually) but complete. Be genuinely helpfu
 
 /**
  * Run the AI agent with agentic loop (Z.AI GLM)
+ * @param {EventEmitter} statusEmitter - Optional EventEmitter for real-time status updates
  */
-async function runAgent(userMessage, conversationContext, author, guild, channel) {
+async function runAgent(userMessage, conversationContext, author, guild, channel, statusEmitter = null) {
     const personality = await loadPersonality();
 
     // Check if user is owner
@@ -98,6 +99,17 @@ async function runAgent(userMessage, conversationContext, author, guild, channel
 
     // Get selected model
     const selectedModel = modelSelection.model;
+
+    // Emit model selection event for real-time status updates
+    if (statusEmitter) {
+        statusEmitter.emit('model_selected', {
+            model: selectedModel,
+            category: modelSelection.category,
+            reasoning: modelSelection.reasoning,
+            complexity: modelSelection.messageComplexity,
+            costs: modelSelection.costs
+        });
+    }
 
     // Analyze message complexity
     const complexitySummary = messageComplexity.getComplexitySummary(userMessage, false);
@@ -173,6 +185,15 @@ User message: ${userMessage}`
             // Hang detection: warn if single iteration takes >60s
             const iterationStart = Date.now();
 
+            // Emit API call start event for real-time status updates
+            if (statusEmitter) {
+                statusEmitter.emit('api_call_start', {
+                    iteration: loopCount,
+                    maxIterations: maxLoops,
+                    elapsedTime: (Date.now() - startTime) / 1000
+                });
+            }
+
             // Apply rate limiting
             await anthropicRateLimiter.removeTokens(1);
 
@@ -199,6 +220,14 @@ User message: ${userMessage}`
             const choice = response.choices[0];
             const finishReason = choice.finish_reason;
 
+            // Emit API call complete event
+            if (statusEmitter) {
+                statusEmitter.emit('api_call_complete', {
+                    iteration: loopCount,
+                    finishReason: finishReason
+                });
+            }
+
             // Hang detection: warn if iteration took >60s
             const iterationTime = (Date.now() - iterationStart) / 1000;
             if (iterationTime > 60) {
@@ -212,6 +241,12 @@ User message: ${userMessage}`
 
             // Check finish reason
             if (finishReason === 'stop') {
+                // Emit thinking event for final processing
+                if (statusEmitter) {
+                    statusEmitter.emit('thinking', {
+                        message: 'Processing final response...'
+                    });
+                }
                 // Agent is done - return final text
                 const finalText = choice.message.content || "I don't have a response for that right now! 🍂";
                 const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
@@ -227,7 +262,16 @@ User message: ${userMessage}`
                 console.log(`📊 [USAGE_STATS] GLM-4.6: ${stats.breakdown['glm-4.6']} (${stats.percentages['glm-4.6']}%)`);
                 console.log(`📊 [USAGE_STATS] ${stats.recommendation}`);
                 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-                
+
+                // Emit completion event
+                if (statusEmitter) {
+                    statusEmitter.emit('complete', {
+                        totalIterations: loopCount,
+                        totalTime: totalTime,
+                        success: true
+                    });
+                }
+
                 return finalText;
             }
 
@@ -245,6 +289,15 @@ User message: ${userMessage}`
                     try {
                         // Parse arguments (OpenAI returns JSON string)
                         const args = JSON.parse(toolCall.function.arguments);
+
+                        // Emit tool execution event for real-time status updates
+                        if (statusEmitter) {
+                            statusEmitter.emit('tool_execution', {
+                                toolName: toolCall.function.name,
+                                args: args,
+                                iteration: loopCount
+                            });
+                        }
 
                         // Execute tool
                         const result = await toolExecutor.execute(

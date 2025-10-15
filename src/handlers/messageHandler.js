@@ -133,9 +133,13 @@ module.exports = async function handleMessage(client, message) {
     // Show typing indicator
     await message.channel.sendTyping();
 
-    // Start visual status tracking
+    // Create EventEmitter for real-time status updates
+    const { EventEmitter } = require('events');
+    const statusEmitter = new EventEmitter();
+
+    // Start visual status tracking with event emitter
     let statusTracker = null;
-    statusTracker = await statusService.start(message);
+    statusTracker = await statusService.start(message, statusEmitter);
 
     try {
         await debugService.logMessageFlow('processing', message.id, {
@@ -155,14 +159,15 @@ module.exports = async function handleMessage(client, message) {
         }, executionId);
 
         console.log(`🚀 Calling agentService.runAgent...`);
-        // Run AI agent with agentic loop
-        // The agent will handle tool selection, execution, and multi-step reasoning
+        // Run AI agent with agentic loop and real-time status updates
+        // The agent will emit events that update the status indicator in real-time
         const finalResponse = await agentService.runAgent(
             message.content,
             context,
             message.author,
             message.guild,
-            message.channel  // Pass channel info so Sunny knows where the message came from
+            message.channel,
+            statusEmitter  // Pass event emitter for real-time status updates
         );
 
         const processingTime = Date.now() - startTime;

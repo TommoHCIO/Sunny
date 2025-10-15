@@ -20,21 +20,22 @@ const { getAIProvider } = require('./aiProviderFactory');
 
 /**
  * Run the AI agent with agentic loop
- * 
+ *
  * Delegates to the configured provider (Anthropic or Z.AI).
  * The provider handles the agentic loop, tool execution, and response generation.
- * 
+ *
  * @param {string} userMessage - The user's message to process
  * @param {string} conversationContext - Recent conversation history formatted as string
  * @param {import('discord.js').User} author - Discord user who sent the message
  * @param {import('discord.js').Guild} guild - Discord guild where message was sent
  * @param {import('discord.js').TextChannel} channel - Discord channel where message was sent
+ * @param {EventEmitter} statusEmitter - Optional EventEmitter for real-time status updates
  * @returns {Promise<string>} Final text response to send to user
  * @throws {Error} On configuration or API errors
  */
-async function runAgent(userMessage, conversationContext, author, guild, channel) {
+async function runAgent(userMessage, conversationContext, author, guild, channel, statusEmitter = null) {
     const provider = getAIProvider();
-    return await provider.runAgent(userMessage, conversationContext, author, guild, channel);
+    return await provider.runAgent(userMessage, conversationContext, author, guild, channel, statusEmitter);
 }
 
 /**
