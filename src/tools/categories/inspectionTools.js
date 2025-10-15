@@ -142,6 +142,24 @@ function getInspectionTools(guild) {
                 },
                 required: []
             }
+        },
+        {
+            name: "audit_permissions",
+            description: "Comprehensive audit of ALL channel and category permissions across the entire server. Shows which roles can view/send/manage each channel, identifies permission issues (@everyone too permissive, missing role restrictions, channels visible when they shouldn't be), and provides specific recommendations for fixes. Use this to find and fix all permission problems.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    show_issues_only: {
+                        type: "boolean",
+                        description: "Only show channels with potential permission issues (recommended: true)"
+                    },
+                    check_role: {
+                        type: "string",
+                        description: "Check permissions for a specific role name"
+                    }
+                },
+                required: []
+            }
         }
     ];
 }

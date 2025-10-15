@@ -382,6 +382,9 @@ async function execute(toolName, input, guild, author) {
             case 'get_moderation_stats':
                 return await serverInspection.getModerationStats(guild);
 
+            case 'audit_permissions':
+                return await auditPermissions(guild, input);
+
             // ===== MEMBER MANAGEMENT TOOLS (#99-103) =====
             case 'get_member_info':
                 return await memberManagement.getMemberInfo(guild, input);
@@ -776,6 +779,189 @@ async function getChannelInfo(guild, input) {
         return {
             success: false,
             error: `Failed to get channel info: ${error.message}`
+        };
+    }
+}
+
+async function auditPermissions(guild, input) {
+    try {
+        const { PermissionFlagsBits } = require('discord.js');
+        const showIssuesOnly = input.show_issues_only || false;
+        const checkRole = input.check_role;
+
+        const channels = Array.from(guild.channels.cache.values())
+            .filter(c => c.type !== ChannelType.GuildCategory); // Process categories separately
+        const categories = Array.from(guild.channels.cache.values())
+            .filter(c => c.type === ChannelType.GuildCategory);
+
+        const everyoneRole = guild.roles.everyone;
+        const allRoles = Array.from(guild.roles.cache.values());
+
+        const audit = [];
+        const issues = [];
+
+        // Audit categories first
+        for (const category of categories) {
+            const categoryPerms = {
+                name: category.name,
+                type: 'Category',
+                id: category.id,
+                permissions: {},
+                issues: []
+            };
+
+            // Check @everyone permissions
+            const everyoneOverwrites = category.permissionOverwrites.cache.get(everyoneRole.id);
+            if (everyoneOverwrites) {
+                const perms = everyoneOverwrites.allow;
+                categoryPerms.permissions['@everyone'] = {
+                    view: perms.has(PermissionFlagsBits.ViewChannel),
+                    send: perms.has(PermissionFlagsBits.SendMessages),
+                    denied: everyoneOverwrites.deny.toArray().length > 0
+                };
+
+                // Check for overly permissive @everyone
+                if (perms.has(PermissionFlagsBits.ViewChannel)) {
+                    categoryPerms.issues.push('@everyone can view this category - may expose private channels');
+                }
+            } else {
+                categoryPerms.permissions['@everyone'] = { view: true, send: true, denied: false };
+                categoryPerms.issues.push('@everyone has DEFAULT permissions - category is fully public');
+            }
+
+            // Check role-specific permissions
+            for (const role of allRoles) {
+                if (role.name === '@everyone') continue;
+                if (checkRole && role.name.toLowerCase() !== checkRole.toLowerCase()) continue;
+
+                const roleOverwrites = category.permissionOverwrites.cache.get(role.id);
+                if (roleOverwrites) {
+                    categoryPerms.permissions[role.name] = {
+                        view: roleOverwrites.allow.has(PermissionFlagsBits.ViewChannel),
+                        send: roleOverwrites.allow.has(PermissionFlagsBits.SendMessages),
+                        manage: roleOverwrites.allow.has(PermissionFlagsBits.ManageChannels),
+                        denied: roleOverwrites.deny.has(PermissionFlagsBits.ViewChannel)
+                    };
+                }
+            }
+
+            if (!showIssuesOnly || categoryPerms.issues.length > 0) {
+                audit.push(categoryPerms);
+                if (categoryPerms.issues.length > 0) issues.push(`Category "${category.name}": ${categoryPerms.issues.join(', ')}`);
+            }
+        }
+
+        // Audit channels
+        for (const channel of channels) {
+            const channelPerms = {
+                name: channel.name,
+                type: getChannelTypeName(channel.type),
+                category: channel.parent?.name || 'No category',
+                id: channel.id,
+                permissions: {},
+                issues: []
+            };
+
+            // Check @everyone permissions
+            const everyoneOverwrites = channel.permissionOverwrites.cache.get(everyoneRole.id);
+            if (everyoneOverwrites) {
+                const perms = everyoneOverwrites.allow;
+                const denies = everyoneOverwrites.deny;
+
+                channelPerms.permissions['@everyone'] = {
+                    view: !denies.has(PermissionFlagsBits.ViewChannel) && perms.has(PermissionFlagsBits.ViewChannel),
+                    send: !denies.has(PermissionFlagsBits.SendMessages) && perms.has(PermissionFlagsBits.SendMessages),
+                    denied: denies.has(PermissionFlagsBits.ViewChannel)
+                };
+
+                // Check for overly permissive @everyone
+                if (!denies.has(PermissionFlagsBits.ViewChannel) && channel.parent) {
+                    const parentPerms = channel.parent.permissionOverwrites.cache.get(everyoneRole.id);
+                    if (!parentPerms || !parentPerms.deny.has(PermissionFlagsBits.ViewChannel)) {
+                        channelPerms.issues.push('@everyone can view - should this be role-restricted?');
+                    }
+                }
+            } else {
+                // No explicit overwrites - inherits from category or server
+                if (!channel.parent) {
+                    channelPerms.permissions['@everyone'] = { view: true, send: true, denied: false };
+                    channelPerms.issues.push('@everyone has DEFAULT permissions - channel is fully public');
+                } else {
+                    channelPerms.permissions['@everyone'] = { inherits: true, from: channel.parent.name };
+                }
+            }
+
+            // Check role-specific permissions
+            for (const role of allRoles) {
+                if (role.name === '@everyone') continue;
+                if (checkRole && role.name.toLowerCase() !== checkRole.toLowerCase()) continue;
+
+                const roleOverwrites = channel.permissionOverwrites.cache.get(role.id);
+                if (roleOverwrites) {
+                    const allows = roleOverwrites.allow;
+                    const denies = roleOverwrites.deny;
+
+                    channelPerms.permissions[role.name] = {
+                        view: allows.has(PermissionFlagsBits.ViewChannel) && !denies.has(PermissionFlagsBits.ViewChannel),
+                        send: allows.has(PermissionFlagsBits.SendMessages) && !denies.has(PermissionFlagsBits.SendMessages),
+                        manage: allows.has(PermissionFlagsBits.ManageChannels),
+                        denied: denies.has(PermissionFlagsBits.ViewChannel)
+                    };
+                } else if (channel.parent) {
+                    // Check if role has permissions on parent category
+                    const parentOverwrites = channel.parent.permissionOverwrites.cache.get(role.id);
+                    if (parentOverwrites) {
+                        channelPerms.permissions[role.name] = {
+                            inherits: true,
+                            from: channel.parent.name
+                        };
+                    }
+                }
+            }
+
+            // Detect missing role restrictions for specialty channels
+            const specialChannelPatterns = [
+                { pattern: /gam(e|ing)/i, expectedRole: 'Gamer' },
+                { pattern: /art|creative|craft/i, expectedRole: 'Artist' },
+                { pattern: /music/i, expectedRole: 'Music Lover' },
+                { pattern: /photo/i, expectedRole: 'Photographer' },
+                { pattern: /movie|film/i, expectedRole: 'Movie Buff' },
+                { pattern: /read|writ|book|library/i, expectedRole: 'Reader/Writer' }
+            ];
+
+            for (const { pattern, expectedRole } of specialChannelPatterns) {
+                if (pattern.test(channel.name)) {
+                    const role = guild.roles.cache.find(r => r.name === expectedRole);
+                    if (role && !channelPerms.permissions[expectedRole]) {
+                        channelPerms.issues.push(`Missing "${expectedRole}" role restriction - channel may be visible to non-members`);
+                    }
+                }
+            }
+
+            if (!showIssuesOnly || channelPerms.issues.length > 0) {
+                audit.push(channelPerms);
+                if (channelPerms.issues.length > 0) issues.push(`#${channel.name}: ${channelPerms.issues.join(', ')}`);
+            }
+        }
+
+        return {
+            success: true,
+            total_channels: audit.length,
+            total_issues: issues.length,
+            audit_results: audit,
+            issues_summary: issues,
+            recommendations: [
+                '1. Deny @everyone ViewChannel on categories containing role-restricted channels',
+                '2. Explicitly allow specific roles on their designated channels',
+                '3. Remove unnecessary @everyone permissions on specialty channels',
+                '4. Use category-level permissions to reduce per-channel overwrites',
+                '5. Verify pronoun role channels are visible to all members'
+            ]
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: `Failed to audit permissions: ${error.message}`
         };
     }
 }
