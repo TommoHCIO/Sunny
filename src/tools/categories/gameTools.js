@@ -17,6 +17,30 @@ function getGameTools(guild) {
     return [
         // ===== TRIVIA GAME TOOLS =====
         {
+            name: "generate_trivia_question",
+            description: "Generate a single AI-powered trivia question and post it immediately. Use this for quick trivia or testing questions. Returns a formatted embed with the question and answer buttons.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    channelName: {
+                        type: "string",
+                        description: "Channel to post the trivia question in"
+                    },
+                    category: {
+                        type: "string",
+                        description: "Question topic - can be ANYTHING! Examples: dinosaurs, quantum physics, medieval castles, cooking, anime, war history, economics, philosophy, space, etc."
+                    },
+                    difficulty: {
+                        type: "string",
+                        description: "Difficulty level",
+                        enum: ["easy", "medium", "hard"],
+                        default: "medium"
+                    }
+                },
+                required: ["channelName", "category"]
+            }
+        },
+        {
             name: "start_trivia",
             description: "Start a trivia game in the channel. Can specify category, difficulty, and number of questions.",
             input_schema: {

@@ -538,6 +538,9 @@ async function execute(toolName, input, guild, author) {
                 return await configureTicketCategories(guild, input);
 
             // ===== GAME AND ENTERTAINMENT TOOLS =====
+            case 'generate_trivia_question':
+                return await generateSingleTriviaQuestion(guild, input);
+
             case 'start_trivia':
                 return await startTrivia(guild, input);
 
@@ -2543,6 +2546,193 @@ async function configureTicketCategories(guild, input) {
 }
 
 // ===== GAME AND ENTERTAINMENT IMPLEMENTATIONS =====
+
+/**
+ * Generate and post a single trivia question
+ * @param {Guild} guild - Discord guild
+ * @param {Object} input - Tool input
+ * @returns {Promise<Object>} Result object
+ */
+async function generateSingleTriviaQuestion(guild, input) {
+    try {
+        const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+        const OpenAI = require('openai');
+        
+        // Find channel
+        const channel = findChannel(guild, input.channelName);
+        if (!channel) {
+            return { success: false, error: `Channel "${input.channelName}" not found` };
+        }
+
+        const category = input.category || 'general';
+        const difficulty = input.difficulty || 'medium';
+
+        // Initialize Z.AI client
+        const aiClient = new OpenAI({
+            apiKey: process.env.ZAI_API_KEY,
+            baseURL: process.env.ZAI_BASE_URL || 'https://api.z.ai/api/paas/v4/'
+        });
+
+        // Generate question using Z.AI
+        const prompt = `Generate a ${difficulty} trivia question about ${category}.
+
+Return ONLY a JSON object in this exact format (no markdown, no extra text):
+{
+  "question": "The trivia question here",
+  "answers": ["Answer A", "Answer B", "Answer C", "Answer D"],
+  "correct": 0,
+  "category": "${category}",
+  "explanation": "Brief explanation of why this is the correct answer"
+}
+
+Rules:
+- The question should be appropriate for all ages but intellectually challenging
+- Make exactly 4 answer options
+- The correct answer index (0-3) should be randomized
+- All answers should be highly plausible to make it challenging
+- ${difficulty === 'easy' ? 'Make the question accessible but interesting' : difficulty === 'hard' ? 'Make the question very challenging, requiring specialized knowledge' : 'Make the question moderately challenging'}
+- The question should be factual and verifiable
+- IMPORTANT: Generate a completely UNIQUE question`;
+
+        console.log('🎲 Generating single trivia question...', {
+            category,
+            difficulty,
+            provider: 'zai',
+            model: 'glm-4.6'
+        });
+
+        const response = await aiClient.chat.completions.create({
+            model: 'glm-4.6',
+            max_tokens: 800,
+            temperature: 0.7,
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are a trivia question generator. You MUST respond with valid JSON only, no other text.'
+                },
+                {
+                    role: 'user',
+                    content: prompt
+                }
+            ]
+        });
+
+        const content = response.choices[0].message.content;
+        console.log('📝 Raw AI response:', content.substring(0, 200) + '...');
+
+        // Parse JSON response
+        const jsonStr = content.replace(/```json\n?|```\n?/g, '').trim();
+        const question = JSON.parse(jsonStr);
+
+        // Validate question format
+        if (!question.question || !Array.isArray(question.answers) || 
+            question.answers.length !== 4 || typeof question.correct !== 'number') {
+            throw new Error('Invalid question format from AI');
+        }
+
+        // Create embed
+        const embed = new EmbedBuilder()
+            .setColor('#00CED1')
+            .setTitle('🧠 Trivia Question!')
+            .setDescription(question.question)
+            .addFields(
+                question.answers.map((answer, index) => ({
+                    name: `${['A', 'B', 'C', 'D'][index]}`,
+                    value: answer,
+                    inline: true
+                }))
+            )
+            .setFooter({ text: `${category} | ${difficulty} | 20 seconds to answer!` });
+
+        // Create answer buttons
+        const gameId = `trivia_${channel.id}_${Date.now()}`;
+        const row = new ActionRowBuilder()
+            .addComponents(
+                ['A', 'B', 'C', 'D'].map(letter => 
+                    new ButtonBuilder()
+                        .setCustomId(`trivia_${letter}_${gameId}`)
+                        .setLabel(letter)
+                        .setStyle(ButtonStyle.Primary)
+                )
+            );
+
+        // Post question
+        const triviaMessage = await channel.send({ embeds: [embed], components: [row] });
+
+        // Store game state in activeGames
+        const gameState = {
+            type: 'trivia',
+            channelId: channel.id,
+            question: question,
+            messageId: triviaMessage.id,
+            startTime: Date.now(),
+            participants: new Map(),
+            ended: false
+        };
+        gameService.activeGames.set(gameId, gameState);
+
+        // Set timer for 20 seconds
+        setTimeout(async () => {
+            gameState.ended = true;
+            
+            // Disable buttons
+            const disabledRow = new ActionRowBuilder()
+                .addComponents(
+                    row.components.map(button => 
+                        ButtonBuilder.from(button).setDisabled(true)
+                    )
+                );
+            
+            try {
+                await triviaMessage.edit({ components: [disabledRow] });
+            } catch (err) {
+                console.error('Failed to disable buttons:', err.message);
+            }
+            
+            // Show results
+            const correctUsers = [];
+            for (const [userId, answer] of gameState.participants) {
+                if (answer === question.correct) {
+                    correctUsers.push(`<@${userId}>`);
+                }
+            }
+            
+            const correctLetter = ['A', 'B', 'C', 'D'][question.correct];
+            const correctAnswer = question.answers[question.correct];
+            
+            const resultsEmbed = new EmbedBuilder()
+                .setColor(correctUsers.length > 0 ? '#00FF00' : '#FF0000')
+                .setTitle(`✅ Answer: ${correctLetter}. ${correctAnswer}`)
+                .setDescription(
+                    (question.explanation ? `💡 ${question.explanation}\n\n` : '') +
+                    (correctUsers.length > 0 
+                        ? `**Got it right:** ${correctUsers.join(', ')}` 
+                        : gameState.participants.size > 0 
+                            ? '**Nobody got this one!**' 
+                            : '**Nobody answered!**')
+                );
+            
+            await channel.send({ embeds: [resultsEmbed] });
+            
+            // Clean up
+            gameService.activeGames.delete(gameId);
+        }, 20000);
+
+        return {
+            success: true,
+            message: `Generated trivia question about ${category}`,
+            question: question.question,
+            category: category,
+            difficulty: difficulty
+        };
+    } catch (error) {
+        console.error('❌ Failed to generate trivia question:', error);
+        return { 
+            success: false, 
+            error: `Failed to generate trivia question: ${error.message}` 
+        };
+    }
+}
 
 async function startTrivia(guild, input) {
     try {
