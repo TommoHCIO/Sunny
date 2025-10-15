@@ -130,10 +130,13 @@ Rules:
             // Z.AI using OpenAI SDK
             console.log('📡 Calling Z.AI API...');
             const response = await aiClient.chat.completions.create({
-                model: 'glm-4.5-air', // Fast and cheap for trivia
-                max_tokens: 500,
-                temperature: 0.8,
+                model: 'glm-4-flash', // More reliable than glm-4.5-air for structured output
+                max_tokens: 800,
+                temperature: 0.7,
                 messages: [{
+                    role: 'system',
+                    content: 'You are a trivia question generator. You MUST respond with valid JSON only, no other text.'
+                }, {
                     role: 'user',
                     content: prompt
                 }]
@@ -144,6 +147,13 @@ Rules:
                 hasContent: !!response.choices?.[0]?.message?.content
             });
             content = response.choices[0].message.content;
+            
+            // Check for empty response from Z.AI
+            if (!content || content.trim() === '') {
+                console.error('❌ Z.AI returned empty content!');
+                console.error('Full response:', JSON.stringify(response, null, 2));
+                throw new Error('Z.AI returned empty response');
+            }
         } else {
             // Anthropic
             console.log('📡 Calling Anthropic API...');
