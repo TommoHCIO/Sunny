@@ -26,11 +26,13 @@ module.exports.RATE_LIMITS = {
         MAX_BURST: 10             // Allow bursts of 10 requests
     },
     
-    // Anthropic API rate limits
+    // Anthropic/Z.AI API rate limits
+    // Z.AI uses concurrency-based limits (concurrent in-flight requests)
+    // rather than traditional RPM limits. Setting high limits to match.
     ANTHROPIC: {
-        TOKENS_PER_INTERVAL: 50,  // 50 requests per minute (adjust per tier)
-        INTERVAL_MS: 60000,       // 1 minute
-        MAX_BURST: 5              // Allow small bursts
+        TOKENS_PER_INTERVAL: 300,  // 300 requests per minute (5 req/sec - very generous for Z.AI)
+        INTERVAL_MS: 60000,        // 1 minute
+        MAX_BURST: 50              // Allow large bursts up to 50 concurrent requests
     },
     
     // Tool execution rate limits
