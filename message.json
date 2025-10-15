@@ -1,1 +1,0 @@
-{"jsonrpc":"2.0","method":"tools/call","params":{"name":"send_discord_message","arguments":{"channel_id":"1425938118556782693","content":"Emoji fix deployed! Changed to use raw buffers instead of AttachmentBuilder. MP4 to GIF conversion should work after Render redeploys in 2 minutes."}},"id":1}

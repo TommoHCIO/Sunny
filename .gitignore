@@ -35,3 +35,28 @@ coverage/
 tmp/
 temp/
 .magg/
+
+# Test and debug files
+test-*.js
+*_test.txt
+*_messages.txt
+*_logs.txt
+*_response.txt
+check*.txt
+latest*.txt
+recent*.txt
+discord_*.txt
+sunny_*.txt
+message.json
+success.json
+test_*.json
+deploy_*.json
+nul
+
+# Documentation (temporary/local)
+QUICK_PASTE_*.txt
+RENDER_ENV_VARS.txt
+
+# Script utilities
+kill-all.bat
+kill-all.sh

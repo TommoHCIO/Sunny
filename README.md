@@ -6,11 +6,17 @@ Sunny is a friendly AI admin and moderator for The Nook, a cozy autumn-themed Di
 
 - **Natural Conversation**: No slash commands - just talk to Sunny naturally by mentioning "Hey Sunny", using @mentions, or replying to her messages
 - **Multi-Provider AI**: Supports Anthropic Claude and Z.AI GLM models with easy switching between providers
+- **Smart Model Selection**: Automatically chooses between GLM-4.5-Air (efficient) and GLM-4.6 (advanced) based on conversation complexity
+- **Real-Time Status Updates**: Live progress indicators show actual AI operations (model selection, API calls, tool execution)
+- **Message History Visibility**: Sunny can now fetch and view Discord message history, including full embed content
 - **Admin & Moderator**: Sunny manages the server with owner-authorized actions and autonomous moderation
-- **75+ Discord Actions**: Complete server management including channels, roles, threads, forums, events, emojis, and permissions
+- **75+ Discord Actions**: Complete server management including channels, roles, threads, forums, events, emojis, permissions, tickets, and automated messages
 - **Role Management**: Self-assignable interest and pronoun roles with auto-creation
-- **Conversation Context**: Remembers recent messages for natural, flowing conversations
+- **Conversation Context**: Remembers recent messages and can view channel history for natural, flowing conversations
 - **Permission System**: Owner-only commands for sensitive actions, member-accessible for self-service
+- **Interactive Games & Entertainment**: AI-powered trivia (19+ categories), Rock-Paper-Scissors, number guessing with button interactions
+- **Persistent Memory System**: Long-term context retention for personalized interactions across sessions
+- **Media Processing**: Image compression, resizing, and MP4→APNG conversion for Discord stickers/emojis
 - **Cozy Autumn Vibes**: Warm, welcoming personality that matches The Nook's theme
 
 ## Quick Start
@@ -111,12 +117,15 @@ You should see:
 **Natural Mentions:**
 ```
 User: Hey Sunny, can I get the Gamer role?
+[Status Indicator: 🤖 AI Model Selected → Using GLM-4.5-Air (Efficient)]
+[Status Indicator: 🔧 Executing Tool → Running: assign_role]
 Sunny: You got it! I've added the Gamer role for you. You'll now see the #gaming-lounge channel!
 ```
 
 **@Mentions:**
 ```
 User: @Sunny what are the server rules?
+[Status Indicator: 📤 Sending API Request → Processing your question...]
 Sunny: You can find our community guidelines in #rules-and-info! The main ones are: be kind, keep content appropriate, and use channels correctly. 🍂
 ```
 
@@ -125,6 +134,31 @@ Sunny: You can find our community guidelines in #rules-and-info! The main ones a
 Sunny: Welcome to The Nook! 🍂
 User: [Replies to Sunny's message] Thanks! Can I get the Artist role?
 Sunny: Of course! I've given you the Artist role. Check out #creative-corner!
+```
+
+**View Message History:**
+```
+User: Sunny, can you see all embeds in the #announcements channel?
+[Status Indicator: 🔧 Executing Tool → Running: get_channel_messages]
+Sunny: Yes! I can see 5 embeds in #announcements:
+1. Welcome Message (posted by @Admin)
+2. Server Rules Update (posted by @Sunny)
+...
+```
+
+**AI-Powered Trivia:**
+```
+User: Hey Sunny, start a trivia game about music!
+[Status Indicator: 🤖 AI Model Selected → Using GLM-4.6 (Advanced)]
+Sunny: 🎵 **Music Trivia - Medium Difficulty**
+
+Which band released the album "The Dark Side of the Moon" in 1973?
+A) Led Zeppelin
+B) Pink Floyd
+C) The Beatles
+D) The Rolling Stones
+
+(Questions are AI-generated and never repeat!)
 ```
 
 ### Owner Commands
@@ -264,6 +298,41 @@ See [MIGRATION_TEST_CHECKLIST.md](MIGRATION_TEST_CHECKLIST.md) for comprehensive
 
 **Zero-downtime rollback** is always available!
 
+## Recent Updates
+
+### v2.2.0 - Real-Time Status & Message History (January 2025)
+- ✨ **Real-Time Event-Driven Status**: Live progress shows actual operations (model selection, API calls, tool execution) with EventEmitter architecture
+- 📜 **Message History Tool**: Fetch and view Discord messages with complete embed data (title, description, fields, colors, images)
+- 🔍 **AI Provider Identification**: Ask Sunny which AI model she's currently using
+- ⏱️ **Hang Detection System**: Removed time limits, added intelligent hang detection for better reliability
+
+### v2.1.0 - Smart AI & Enhanced Gaming (January 2025)
+- 🎯 **Smart Model Selection**: Auto-switches between GLM-4.5-Air (efficient) and GLM-4.6 (advanced) based on complexity
+- 🎮 **AI-Powered Trivia**: Generate unique questions across 19+ categories that never repeat
+- 🏆 **Enhanced Trivia System**: Multi-question sessions, leaderboards, progressive message cleanup
+- 🎲 **Interactive Games**: Rock-Paper-Scissors, number guessing, trivia with button interactions
+
+### v2.0.0 - Multi-Provider Architecture (December 2024)
+- 🤖 **Z.AI GLM Integration**: Added support for Z.AI's GLM models (73-81% cost savings)
+- 🔄 **Provider Switching**: Easy runtime switching between Anthropic and Z.AI
+- 💰 **Cost Optimization**: Smart model selection reduces costs dramatically
+- 📊 **Dynamic Response Length**: Adjusts response complexity based on message complexity
+
+### v1.9.0 - Advanced Discord Features (November 2024)
+- 🧠 **Persistent Memory System**: Long-term context retention across sessions
+- 🎫 **Thread-Based Ticketing**: Interactive ticket system with modal forms and button panels
+- 📨 **Automatic Messages**: Scheduled/triggered automated messaging system
+- 🎨 **Media Processing**: Image compression, resizing, MP4→APNG conversion for stickers/emojis
+- 📸 **Attachment Vision**: See and use image attachments for sticker/emoji creation
+
+### v1.8.0 - Production Enhancements (October 2024)
+- ⏰ **Time-Based Completion**: Replaced iteration limits with intelligent time-based system (7min timeout)
+- 🎨 **Autumn-Themed Status**: Visually stunning real-time status indicator with autumn aesthetics
+- 🔧 **75+ Discord Tools**: Fixed buggy tools, implemented 11 missing Discord actions
+- 📝 **Smart Message Splitting**: Automatic splitting for Discord's 2000/4000 char limits
+- 🛡️ **Bot Whitelist**: Prevent conflicts with other bots
+- 🔄 **Reaction Roles**: MongoDB-backed persistent reaction role system
+
 ## Project Structure
 
 ```
@@ -276,12 +345,20 @@ sunny-bot/
 ├── src/
 │   ├── index.js              # Main bot entry point
 │   ├── handlers/
-│   │   ├── messageHandler.js    # Message processing
+│   │   ├── messageHandler.js    # Message processing with status tracking
 │   │   └── memberHandler.js     # Welcome/goodbye messages
 │   ├── services/
-│   │   ├── claudeService.js     # Claude API integration
+│   │   ├── agentService.js      # Agent facade layer
 │   │   ├── contextService.js    # Conversation context
-│   │   └── roleService.js       # Role management
+│   │   ├── roleService.js       # Role management
+│   │   ├── statusService.js     # Real-time status indicator
+│   │   └── providers/
+│   │       ├── aiProviderFactory.js  # Multi-provider architecture
+│   │       ├── zaiProvider.js        # Z.AI GLM integration
+│   │       └── claudeProvider.js     # Anthropic Claude integration
+│   ├── tools/
+│   │   ├── toolExecutor.js      # 75+ Discord tools including message fetching
+│   │   └── categories/          # Tool definitions by category
 │   └── utils/
 │       ├── logger.js            # Winston logging
 │       ├── permissions.js       # Permission checks
@@ -506,35 +583,67 @@ pm2 save
 
 ## AI Model Information
 
-### Claude Sonnet 4.5
+### Multi-Provider Architecture
 
-Sunny uses **Claude Sonnet 4.5** (released May 2025), Anthropic's most advanced model for agent workflows:
+Sunny now supports **intelligent model selection** with cost optimization:
 
-**Why Sonnet 4.5?**
-- 🤖 **Best for Agents**: World's strongest model for building complex agents and tool use
-- 🧠 **Extended Reasoning**: Maintains focus for 30+ hours on multi-step tasks
-- 🎯 **87% Better**: Dramatically improved function calling and action execution accuracy
-- 💰 **Cost Effective**: Same pricing as Claude 3.5 Sonnet ($3/$15 per million tokens)
-- 🔧 **Better Tool Usage**: More reliable Discord action execution with fewer mistakes
+**Z.AI GLM (Recommended for Cost Savings):**
+- **Smart Selection**: Automatically picks between GLM-4.5-Air (efficient) and GLM-4.6 (advanced) based on message complexity
+- **GLM-4.5-Air**: 81% cost savings, 90.6% tool-calling success rate, 217.5 tokens/sec
+- **GLM-4.6**: Latest model for complex reasoning and advanced tasks
+- **Cost**: $0.20-0.60/1M input, $1.10-2.20/1M output
+- **Best For**: Production Discord bots with high message volume
 
-**Model Comparison:**
-- Sonnet 4.5: Best for Discord bots (tool use, complex reasoning, agentic workflows)
-- Opus 4.1: More powerful but 5x more expensive - overkill for most Discord bots
-- Claude 3.5: Legacy model, works but less sophisticated action handling
+**Anthropic Claude:**
+- **Claude 3 Haiku**: 73% cost savings, reliable and proven
+- **Claude 3.5 Haiku**: Current generation, excellent balance
+- **Claude Sonnet 4.5**: Most advanced agentic workflows (not required for typical usage)
+- **Cost**: $0.25-3.00/1M input, $1.25-15.00/1M output
+- **Best For**: Maximum reliability and official support
 
-You can change the model in `.env` by setting `CLAUDE_MODEL`, but Sonnet 4.5 is highly recommended for best results.
+**Model Selection Logic (Z.AI):**
+```javascript
+// Simple messages → GLM-4.5-Air (fast, cheap)
+"Hey Sunny, how are you?"
+
+// Complex operations → GLM-4.6 (advanced)
+"Create a new channel, set permissions, and announce it in #general"
+```
+
+**Change Models:**
+```env
+# Z.AI with smart selection (recommended)
+AI_PROVIDER=zai
+ZAI_MODEL=glm-4.5-air  # Default for simple tasks
+
+# Claude Haiku (stable)
+AI_PROVIDER=anthropic
+CLAUDE_MODEL=claude-3-haiku-20240307
+```
 
 ## Cost Information
 
 **Discord Bot:** Free
-**Claude API:** Pay-as-you-go
-- Input: $3 per million tokens (~3,000 messages)
-- Output: $15 per million tokens (~15,000 responses)
-- With prompt caching: 90% cost savings on repeated content
-**MongoDB Atlas:** Free tier (512MB storage)
-**Hosting:** Free tier available on Fly.io, Railway, Render
 
-Estimated cost for small server (<100 active members): **$5-15/month** for Claude API only.
+**AI Provider Costs (Pay-as-you-go):**
+
+*Z.AI GLM (Recommended):*
+- GLM-4.5-Air: $0.20/1M input, $1.10/1M output
+- GLM-4.6: $0.60/1M input, $2.20/1M output
+- Smart selection saves 73-81% vs Claude
+
+*Anthropic Claude:*
+- Claude 3 Haiku: $0.25/1M input, $1.25/1M output
+- Claude 3.5 Haiku: $0.80/1M input, $4.00/1M output
+- With prompt caching: 90% savings on repeated content
+
+**MongoDB Atlas:** Free tier (512MB storage)
+**Hosting:** Free tier on Fly.io, Railway, Render
+
+**Estimated Monthly Costs:**
+- Z.AI GLM: **$2-6/month** (small server <100 members)
+- Claude 3 Haiku: **$3-8/month**
+- Claude 3.5 Haiku: **$10-30/month**
 
 ## Support
 
