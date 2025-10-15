@@ -15,6 +15,7 @@ const toolExecutor = require('../../tools/toolExecutor');
 const { retryWithBackoff } = require('../../utils/retry');
 const { anthropicRateLimiter } = require('../../utils/rateLimiter');
 const messageComplexity = require('../../utils/messageComplexity');
+const modelSelector = require('../../utils/modelSelector');
 
 // Initialize OpenAI client with Z.AI configuration
 const client = new OpenAI({
@@ -81,6 +82,23 @@ async function runAgent(userMessage, conversationContext, author, guild, channel
     // Get channel info
     const channelInfo = channel ? `\nCurrent channel: #${channel.name} (ID: ${channel.id}, Category: ${channel.parent?.name || 'None'})` : '';
 
+    // SMART MODEL SELECTION - Choose GLM-4.6 vs GLM-4.5-Air
+    const modelSelection = modelSelector.selectModel(userMessage, conversationContext, isUserOwner);
+    
+    // Log to console (visible in Render logs)
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(`🤖 [MODEL_SELECTOR] User: ${author.username}`);
+    console.log(`🤖 [MODEL_SELECTOR] Selected: ${modelSelection.model.toUpperCase()}`);
+    console.log(`🤖 [MODEL_SELECTOR] Category: ${modelSelection.category}`);
+    console.log(`🤖 [MODEL_SELECTOR] Reasoning: ${modelSelection.reasoning}`);
+    console.log(`🤖 [MODEL_SELECTOR] Complexity: ${modelSelection.messageComplexity}`);
+    console.log(`🤖 [MODEL_SELECTOR] Score: ${modelSelection.complexityScore}`);
+    console.log(`💰 [MODEL_SELECTOR] Cost: ${modelSelection.costs.input}/${modelSelection.costs.output} per 1M tokens`);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    // Get selected model
+    const selectedModel = modelSelection.model;
+
     // Analyze message complexity
     const complexitySummary = messageComplexity.getComplexitySummary(userMessage, false);
     console.log(`📊 Message complexity analysis:`, complexitySummary);
@@ -96,11 +114,10 @@ ${complexitySummary.isListRequest ? 'Note: User is requesting a list - provide c
 IMPORTANT: Follow the response guideline above for appropriate length. Match the response depth to what the user needs.`;
 
     // Get current model info
-    const currentModel = process.env.ZAI_MODEL || 'glm-4.5-air';
     const modelInfo = `
 
 ## YOUR CURRENT AI MODEL
-You are currently powered by **Z.AI ${currentModel.toUpperCase()}** (via Z.AI's API platform). When users ask what model you're running, tell them you're using "Z.AI ${currentModel.toUpperCase()}" or "Z.AI GLM-4.5-Air", NOT Claude or any other model. This is a cost-optimized deployment that offers excellent performance with 90.6% tool-calling success rate and fast response times.`;
+You are currently powered by **Z.AI ${selectedModel.toUpperCase()}** (via Z.AI's API platform). When users ask what model you're running, tell them you're using "Z.AI ${selectedModel.toUpperCase()}", NOT Claude or any other model. This is an intelligent deployment that automatically selects the best model (GLM-4.5-Air or GLM-4.6) based on task complexity for optimal cost-efficiency and performance.`;
 
     // Build system message (OpenAI format)
     const systemMessage = `${personality}
@@ -133,7 +150,7 @@ User message: ${userMessage}`
     const tools = convertToolsToOpenAIFormat(anthropicTools);
 
     console.log(`🤖 [Z.AI] Starting agentic loop for: ${author.username}`);
-    console.log(`🔧 [Z.AI] Model: ${process.env.ZAI_MODEL || 'glm-4.5-air'}`);
+    console.log(`🔧 [Z.AI] Using model: ${selectedModel}`);
 
     let loopCount = 0;
     const startTime = Date.now();
@@ -156,10 +173,10 @@ User message: ${userMessage}`
             // Apply rate limiting
             await anthropicRateLimiter.removeTokens(1);
 
-            // Call Z.AI API (OpenAI-compatible)
+            // Call Z.AI API (OpenAI-compatible) with dynamically selected model
             const response = await retryWithBackoff(
                 () => client.chat.completions.create({
-                    model: process.env.ZAI_MODEL || 'glm-4.5-air',
+                    model: selectedModel,
                     messages: messages,
                     tools: tools,
                     tool_choice: 'auto',
@@ -188,8 +205,20 @@ User message: ${userMessage}`
             if (finishReason === 'stop') {
                 // Agent is done - return final text
                 const finalText = choice.message.content || "I don't have a response for that right now! 🍂";
+                const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
+                
                 console.log(`✅ [Z.AI] Agent loop complete after ${loopCount} iterations`);
-                console.log(`📊 [Z.AI] Total time: ${((Date.now() - startTime) / 1000).toFixed(2)}s`);
+                console.log(`📊 [Z.AI] Total time: ${totalTime}s`);
+                
+                // Log model selection statistics
+                const stats = modelSelector.getUsageStats();
+                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                console.log(`📊 [USAGE_STATS] Total Requests: ${stats.total}`);
+                console.log(`📊 [USAGE_STATS] GLM-4.5-Air: ${stats.breakdown['glm-4.5-air']} (${stats.percentages['glm-4.5-air']}%)`);
+                console.log(`📊 [USAGE_STATS] GLM-4.6: ${stats.breakdown['glm-4.6']} (${stats.percentages['glm-4.6']}%)`);
+                console.log(`📊 [USAGE_STATS] ${stats.recommendation}`);
+                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                
                 return finalText;
             }
 
