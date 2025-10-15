@@ -28,8 +28,8 @@ function getGameTools(guild) {
                     },
                     category: {
                         type: "string",
-                        description: "Trivia category (general, science, sports, entertainment, history, geography, etc.)",
-                        enum: ["general", "science", "sports", "entertainment", "history", "geography", "art", "animals", "vehicles", "comics", "gadgets", "anime", "cartoons"]
+                        description: "Trivia category - supports any topic! Common categories: general, science, sports, entertainment, history, geography, art, music, literature, technology, food, nature, animals, vehicles, comics, games, movies, anime, mythology, war, politics, economics, philosophy, religion",
+                        enum: ["general", "science", "sports", "entertainment", "history", "geography", "art", "music", "literature", "technology", "food", "nature", "animals", "vehicles", "comics", "games", "movies", "anime", "mythology", "war", "politics", "economics", "philosophy", "religion"]
                     },
                     difficulty: {
                         type: "string",
@@ -38,9 +38,9 @@ function getGameTools(guild) {
                     },
                     questionCount: {
                         type: "number",
-                        description: "Number of questions (5-20)",
-                        minimum: 5,
-                        maximum: 20
+                        description: "Number of questions (1-10, user's choice is always respected)",
+                        minimum: 1,
+                        maximum: 10
                     }
                 },
                 required: ["channelName"]

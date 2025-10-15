@@ -73,7 +73,12 @@ async function generateTriviaQuestion(category = 'general', difficulty = 'medium
             'games': 'video games, board games, and gaming history',
             'movies': 'cinema, films, directors, and movie history',
             'anime': 'anime, manga, and Japanese animation',
-            'mythology': 'mythology, legends, and ancient stories'
+            'mythology': 'mythology, legends, and ancient stories',
+            'war': 'military history, warfare, battles, famous generals, military strategy, and armed conflicts',
+            'politics': 'politics, political systems, elections, government, and political figures',
+            'economics': 'economics, finance, markets, trade, and economic theory',
+            'philosophy': 'philosophy, philosophers, philosophical concepts, and ethics',
+            'religion': 'world religions, religious history, beliefs, and practices'
         };
 
         // Add randomization to ensure unique questions each time
@@ -196,7 +201,8 @@ async function startTriviaSession(channel, options = {}) {
             console.warn('Bot does not have ManageMessages permission in this channel - message cleanup disabled');
         }
 
-        const questionCount = Math.min(options.questionCount || 5, 10);
+        // Respect user's question count - no minimum requirement
+        const questionCount = options.questionCount ? Math.min(Math.max(options.questionCount, 1), 10) : 5;
         const category = options.category || 'general';
         const difficulty = options.difficulty || 'hard'; // Default to hard for more challenge
         const sessionScores = new Map(); // Track scores across questions
