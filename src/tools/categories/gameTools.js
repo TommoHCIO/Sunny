@@ -28,8 +28,7 @@ function getGameTools(guild) {
                     },
                     category: {
                         type: "string",
-                        description: "Trivia category - supports any topic! Common categories: general, science, sports, entertainment, history, geography, art, music, literature, technology, food, nature, animals, vehicles, comics, games, movies, anime, mythology, war, politics, economics, philosophy, religion",
-                        enum: ["general", "science", "sports", "entertainment", "history", "geography", "art", "music", "literature", "technology", "food", "nature", "animals", "vehicles", "comics", "games", "movies", "anime", "mythology", "war", "politics", "economics", "philosophy", "religion"]
+                        description: "Trivia category - accepts ANY topic! The AI will generate questions about whatever category you specify. Examples: dinosaurs, space exploration, medieval history, cooking, anime, sports, music, technology, war, politics, philosophy, etc. Be creative!"
                     },
                     difficulty: {
                         type: "string",
