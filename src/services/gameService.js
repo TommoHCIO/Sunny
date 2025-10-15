@@ -118,9 +118,17 @@ Rules:
 
         let content;
 
+        console.log('🎲 Generating trivia question...', {
+            category,
+            difficulty,
+            provider: process.env.AI_PROVIDER,
+            usingZAI: !!aiClient
+        });
+
         // Use Z.AI or Anthropic based on what's configured
         if (aiClient) {
             // Z.AI using OpenAI SDK
+            console.log('📡 Calling Z.AI API...');
             const response = await aiClient.chat.completions.create({
                 model: 'glm-4.5-air', // Fast and cheap for trivia
                 max_tokens: 500,
@@ -130,9 +138,15 @@ Rules:
                     content: prompt
                 }]
             });
+            console.log('✅ Z.AI response received:', {
+                hasChoices: !!response.choices,
+                choiceCount: response.choices?.length,
+                hasContent: !!response.choices?.[0]?.message?.content
+            });
             content = response.choices[0].message.content;
         } else {
             // Anthropic
+            console.log('📡 Calling Anthropic API...');
             const response = await anthropic.messages.create({
                 model: 'claude-3-haiku-20240307',
                 max_tokens: 500,
@@ -142,8 +156,11 @@ Rules:
                     content: prompt
                 }]
             });
+            console.log('✅ Anthropic response received');
             content = response.content[0].text;
         }
+        
+        console.log('📝 Raw AI response:', content.substring(0, 200) + '...');
         
         // Try to extract JSON from the response
         let triviaData;
@@ -164,7 +181,16 @@ Rules:
 
         return triviaData;
     } catch (error) {
-        console.error('Error generating trivia question:', error);
+        console.error('❌ TRIVIA GENERATION FAILED:', error);
+        console.error('Error details:', {
+            message: error.message,
+            stack: error.stack,
+            provider: process.env.AI_PROVIDER,
+            hasZaiKey: !!process.env.ZAI_API_KEY,
+            hasZaiBaseUrl: !!process.env.ZAI_BASE_URL,
+            hasAnthropicKey: !!(process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY),
+            usingClient: !!aiClient
+        });
         
         // Fallback to a default question if generation fails
         const fallbackQuestions = [
