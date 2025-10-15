@@ -130,7 +130,7 @@ Rules:
             // Z.AI using OpenAI SDK
             console.log('📡 Calling Z.AI API...');
             const response = await aiClient.chat.completions.create({
-                model: 'glm-4-flash', // More reliable than glm-4.5-air for structured output
+                model: 'glm-4.6', // Most capable model for complex JSON generation
                 max_tokens: 800,
                 temperature: 0.7,
                 messages: [{
