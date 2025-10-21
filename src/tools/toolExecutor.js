@@ -810,6 +810,24 @@ async function execute(toolName, input, guild, author, executionId = null) {
             case 'run_pattern_analysis':
                 return await runPatternAnalysis(guild, input);
 
+            case 'propose_adjustments':
+                return await proposeAdjustments(guild, input);
+
+            case 'approve_adjustment':
+                return await approveAdjustment(guild, input, message);
+
+            case 'reject_adjustment':
+                return await rejectAdjustment(guild, input);
+
+            case 'monitor_adjustments':
+                return await monitorAdjustments(guild, input);
+
+            case 'rollback_adjustment':
+                return await rollbackAdjustment(guild, input);
+
+            case 'adjustment_history':
+                return await adjustmentHistory(guild, input);
+
             default:
                 console.error(`❌ Unknown tool: ${toolName}`);
                 return {
@@ -3910,6 +3928,451 @@ async function runPatternAnalysis(guild, input) {
         return {
             success: false,
             error: `Failed to run pattern analysis: ${error.message}`
+        };
+    }
+}
+
+// ===== PHASE 3: SELF-ADJUSTMENT TOOL IMPLEMENTATIONS =====
+
+/**
+ * Propose adjustments from approved patterns
+ * @param {Guild} guild - Discord guild object
+ * @param {Object} input - Tool input parameters
+ * @returns {Promise<Object>} Proposed adjustments
+ */
+async function proposeAdjustments(guild, input) {
+    try {
+        const selfAdjustmentEngine = require('../services/selfAdjustmentEngine');
+        const AdjustmentHistory = require('../models/AdjustmentHistory');
+
+        const adjustmentType = input.adjustment_type || 'all';
+        const guildId = guild.id;
+
+        // Trigger proposal generation
+        const proposalResult = await selfAdjustmentEngine.proposeAdjustments(guildId);
+
+        if (!proposalResult.success) {
+            return {
+                success: false,
+                error: proposalResult.message
+            };
+        }
+
+        // Get pending approval adjustments
+        const filters = { guildId, status: 'pending_approval' };
+        if (adjustmentType !== 'all') {
+            filters.adjustmentType = adjustmentType;
+        }
+
+        const pendingAdjustments = await AdjustmentHistory.find(filters)
+            .sort({ confidence: -1, timestamp: -1 })
+            .limit(10);
+
+        if (pendingAdjustments.length === 0) {
+            return {
+                success: true,
+                message: `No pending adjustments found (filter: ${adjustmentType}).\n` +
+                        `${proposalResult.message || 'System will propose new adjustments when patterns are approved.'}`
+            };
+        }
+
+        // Format proposals
+        const proposals = pendingAdjustments.map((adj, idx) => {
+            return `**${idx + 1}. ${adj.adjustmentType.toUpperCase()}** [${adj.confidence.toUpperCase()} confidence]\n` +
+                   `   ID: \`${adj._id}\`\n` +
+                   `   ${adj.description}\n` +
+                   `   Estimated Impact: ${adj.estimatedImpact}\n` +
+                   `   Samples: ${adj.sampleCount} | p-value: ${adj.pValue?.toFixed(4) || 'N/A'}\n`;
+        }).join('\n');
+
+        return {
+            success: true,
+            message: `**Pending Adjustment Proposals (${pendingAdjustments.length}):**\n\n${proposals}\n` +
+                    `Use 'approve_adjustment' to start canary rollout or 'reject_adjustment' to dismiss.`
+        };
+
+    } catch (error) {
+        console.error('[proposeAdjustments] Error:', error);
+        return {
+            success: false,
+            error: `Failed to propose adjustments: ${error.message}`
+        };
+    }
+}
+
+/**
+ * Approve an adjustment to start canary rollout
+ * @param {Guild} guild - Discord guild object
+ * @param {Object} input - Tool input parameters
+ * @param {Message} message - Discord message object for button interactions
+ * @returns {Promise<Object>} Approval result
+ */
+async function approveAdjustment(guild, input, message) {
+    try {
+        const selfAdjustmentEngine = require('../services/selfAdjustmentEngine');
+        const AdjustmentHistory = require('../models/AdjustmentHistory');
+        const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+
+        const adjustmentId = input.adjustment_id;
+        const userId = message.author.id;
+
+        // Get adjustment
+        const adjustment = await AdjustmentHistory.findById(adjustmentId);
+
+        if (!adjustment) {
+            return {
+                success: false,
+                error: `Adjustment not found: ${adjustmentId}`
+            };
+        }
+
+        if (adjustment.status !== 'pending_approval') {
+            return {
+                success: false,
+                error: `Adjustment is not pending approval (current status: ${adjustment.status})`
+            };
+        }
+
+        // Confirm with button
+        const channel = message.channel;
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`confirm_approve_${adjustmentId}`)
+                    .setLabel('✅ Confirm Approval')
+                    .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setCustomId(`cancel_approve_${adjustmentId}`)
+                    .setLabel('❌ Cancel')
+                    .setStyle(ButtonStyle.Secondary)
+            );
+
+        const confirmMsg = await channel.send({
+            content: `**Confirm Adjustment Approval**\n\n` +
+                    `Type: ${adjustment.adjustmentType}\n` +
+                    `${adjustment.description}\n\n` +
+                    `This will start a canary rollout at 5% traffic.\n` +
+                    `The system will automatically progress to 100% if A/B testing shows improvement.\n` +
+                    `Automatic rollback will occur if performance drops >10%.`,
+            components: [row]
+        });
+
+        // Set up collector
+        const collector = channel.createMessageComponentCollector({
+            filter: (i) => i.customId.startsWith(`confirm_approve_${adjustmentId}`) ||
+                          i.customId.startsWith(`cancel_approve_${adjustmentId}`),
+            time: 60000 // 1 minute
+        });
+
+        collector.on('collect', async (interaction) => {
+            try {
+                await interaction.deferReply({ ephemeral: true });
+
+                if (interaction.customId.startsWith('confirm_approve')) {
+                    // Apply adjustment
+                    const result = await selfAdjustmentEngine.applyAdjustment(adjustmentId, userId);
+
+                    if (result.success) {
+                        await interaction.editReply({
+                            content: `✅ Adjustment approved and deployed at 5% canary!\n\n` +
+                                    `Type: ${adjustment.adjustmentType}\n` +
+                                    `${adjustment.description}\n\n` +
+                                    `Use 'monitor_adjustments' to track A/B testing progress.`
+                        });
+                    } else {
+                        await interaction.editReply({
+                            content: `❌ Failed to apply adjustment: ${result.error}`
+                        });
+                    }
+                } else {
+                    await interaction.editReply({
+                        content: `❌ Approval cancelled.`
+                    });
+                }
+
+                await confirmMsg.edit({ components: [] });
+
+            } catch (error) {
+                console.error('[approveAdjustment] Button interaction error:', error);
+                try {
+                    await interaction.editReply({
+                        content: `❌ Error: ${error.message}`
+                    });
+                } catch (e) {
+                    // Ignore
+                }
+            }
+        });
+
+        collector.on('end', async (collected) => {
+            if (collected.size === 0) {
+                await confirmMsg.edit({
+                    content: confirmMsg.content + '\n\n⏱️ Confirmation timed out.',
+                    components: []
+                });
+            }
+        });
+
+        return {
+            success: true,
+            message: 'Awaiting confirmation...'
+        };
+
+    } catch (error) {
+        console.error('[approveAdjustment] Error:', error);
+        return {
+            success: false,
+            error: `Failed to approve adjustment: ${error.message}`
+        };
+    }
+}
+
+/**
+ * Reject a proposed adjustment
+ * @param {Guild} guild - Discord guild object
+ * @param {Object} input - Tool input parameters
+ * @returns {Promise<Object>} Rejection result
+ */
+async function rejectAdjustment(guild, input) {
+    try {
+        const AdjustmentHistory = require('../models/AdjustmentHistory');
+
+        const adjustmentId = input.adjustment_id;
+        const reason = input.reason || 'No reason provided';
+
+        // Get adjustment
+        const adjustment = await AdjustmentHistory.findById(adjustmentId);
+
+        if (!adjustment) {
+            return {
+                success: false,
+                error: `Adjustment not found: ${adjustmentId}`
+            };
+        }
+
+        if (adjustment.status !== 'pending_approval') {
+            return {
+                success: false,
+                error: `Can only reject pending adjustments (current status: ${adjustment.status})`
+            };
+        }
+
+        // Reject
+        await adjustment.reject(reason);
+
+        return {
+            success: true,
+            message: `✅ Adjustment rejected.\n\n` +
+                    `Type: ${adjustment.adjustmentType}\n` +
+                    `${adjustment.description}\n` +
+                    `Reason: ${reason}`
+        };
+
+    } catch (error) {
+        console.error('[rejectAdjustment] Error:', error);
+        return {
+            success: false,
+            error: `Failed to reject adjustment: ${error.message}`
+        };
+    }
+}
+
+/**
+ * Monitor active adjustments with A/B testing metrics
+ * @param {Guild} guild - Discord guild object
+ * @param {Object} input - Tool input parameters
+ * @returns {Promise<Object>} Monitoring results
+ */
+async function monitorAdjustments(guild, input) {
+    try {
+        const AdjustmentHistory = require('../models/AdjustmentHistory');
+
+        const rolloutStage = input.rollout_stage || 'all';
+        const guildId = guild.id;
+
+        // Get active adjustments
+        const filters = { guildId, status: 'active' };
+        if (rolloutStage !== 'all') {
+            filters.rolloutStage = rolloutStage;
+        }
+
+        const activeAdjustments = await AdjustmentHistory.find(filters)
+            .sort({ timestamp: -1 });
+
+        if (activeAdjustments.length === 0) {
+            return {
+                success: true,
+                message: `No active adjustments found (filter: ${rolloutStage})`
+            };
+        }
+
+        // Format monitoring data
+        const monitoringData = activeAdjustments.map((adj, idx) => {
+            const controlGroup = adj.controlGroup || {};
+            const treatmentGroup = adj.treatmentGroup || {};
+
+            const controlRate = (controlGroup.successRate * 100).toFixed(1);
+            const treatmentRate = (treatmentGroup.successRate * 100).toFixed(1);
+            const improvement = ((treatmentRate - controlRate)).toFixed(1);
+            const improvementSymbol = improvement > 0 ? '📈' : improvement < 0 ? '📉' : '➡️';
+
+            const significance = adj.isSignificant ? '✅ SIGNIFICANT' : '⏳ Testing';
+            const pValueStr = adj.pValue ? `p=${adj.pValue.toFixed(4)}` : 'N/A';
+
+            return `**${idx + 1}. ${adj.adjustmentType.toUpperCase()}** [${adj.rolloutStage.replace('_', ' ').toUpperCase()}]\n` +
+                   `   ID: \`${adj._id}\`\n` +
+                   `   ${adj.description}\n\n` +
+                   `   **A/B Testing Metrics:**\n` +
+                   `   Control Group:   ${controlGroup.samples || 0} samples | ${controlRate}% success\n` +
+                   `   Treatment Group: ${treatmentGroup.samples || 0} samples | ${treatmentRate}% success\n` +
+                   `   ${improvementSymbol} Improvement: ${improvement}% | ${significance} (${pValueStr})\n` +
+                   `   Rollout Progress: ${adj.rolloutProgress}%\n`;
+        }).join('\n');
+
+        return {
+            success: true,
+            message: `**Active Adjustments (${activeAdjustments.length}):**\n\n${monitoringData}\n` +
+                    `System monitors every hour and auto-progresses/rolls back based on performance.`
+        };
+
+    } catch (error) {
+        console.error('[monitorAdjustments] Error:', error);
+        return {
+            success: false,
+            error: `Failed to monitor adjustments: ${error.message}`
+        };
+    }
+}
+
+/**
+ * Manually rollback an active adjustment
+ * @param {Guild} guild - Discord guild object
+ * @param {Object} input - Tool input parameters
+ * @returns {Promise<Object>} Rollback result
+ */
+async function rollbackAdjustment(guild, input) {
+    try {
+        const selfAdjustmentEngine = require('../services/selfAdjustmentEngine');
+        const AdjustmentHistory = require('../models/AdjustmentHistory');
+
+        const adjustmentId = input.adjustment_id;
+        const reason = input.reason;
+
+        // Get adjustment
+        const adjustment = await AdjustmentHistory.findById(adjustmentId);
+
+        if (!adjustment) {
+            return {
+                success: false,
+                error: `Adjustment not found: ${adjustmentId}`
+            };
+        }
+
+        if (adjustment.status !== 'active') {
+            return {
+                success: false,
+                error: `Can only rollback active adjustments (current status: ${adjustment.status})`
+            };
+        }
+
+        // Perform rollback
+        const result = await selfAdjustmentEngine.rollbackAdjustment(adjustmentId, reason, false);
+
+        if (result.success) {
+            return {
+                success: true,
+                message: `✅ Adjustment rolled back successfully.\n\n` +
+                        `Type: ${adjustment.adjustmentType}\n` +
+                        `${adjustment.description}\n` +
+                        `Reason: ${reason}\n\n` +
+                        `Configuration has been reverted to original state.`
+            };
+        } else {
+            return {
+                success: false,
+                error: result.message
+            };
+        }
+
+    } catch (error) {
+        console.error('[rollbackAdjustment] Error:', error);
+        return {
+            success: false,
+            error: `Failed to rollback adjustment: ${error.message}`
+        };
+    }
+}
+
+/**
+ * View adjustment history
+ * @param {Guild} guild - Discord guild object
+ * @param {Object} input - Tool input parameters
+ * @returns {Promise<Object>} Historical adjustments
+ */
+async function adjustmentHistory(guild, input) {
+    try {
+        const AdjustmentHistory = require('../models/AdjustmentHistory');
+
+        const days = Math.min(input.days || 30, 365);
+        const statusFilter = input.status || 'all';
+        const guildId = guild.id;
+
+        // Build filters
+        const filters = { guildId };
+        const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        filters.timestamp = { $gte: since };
+
+        if (statusFilter !== 'all') {
+            filters.status = statusFilter;
+        }
+
+        const history = await AdjustmentHistory.find(filters)
+            .sort({ timestamp: -1 })
+            .limit(20);
+
+        if (history.length === 0) {
+            return {
+                success: true,
+                message: `No adjustment history found (last ${days} days, filter: ${statusFilter})`
+            };
+        }
+
+        // Format history
+        const historyData = history.map((adj, idx) => {
+            const statusEmoji = {
+                'completed': '✅',
+                'rolled_back': '🔄',
+                'failed': '❌',
+                'rejected': '🚫',
+                'active': '🔧'
+            }[adj.status] || '❓';
+
+            const date = adj.timestamp.toISOString().split('T')[0];
+
+            let metrics = '';
+            if (adj.status === 'completed' || adj.status === 'rolled_back') {
+                const controlRate = ((adj.controlGroup?.successRate || 0) * 100).toFixed(1);
+                const treatmentRate = ((adj.treatmentGroup?.successRate || 0) * 100).toFixed(1);
+                const improvement = (treatmentRate - controlRate).toFixed(1);
+                metrics = `\n   Final Result: ${improvement}% improvement (${adj.isSignificant ? 'significant' : 'not significant'})`;
+            }
+
+            return `**${idx + 1}. ${statusEmoji} ${adj.adjustmentType.toUpperCase()}** [${date}]\n` +
+                   `   ${adj.description}\n` +
+                   `   Status: ${adj.status}${metrics}\n`;
+        }).join('\n');
+
+        return {
+            success: true,
+            message: `**Adjustment History (Last ${days} days):**\n\n${historyData}\n` +
+                    `Showing up to 20 most recent adjustments.`
+        };
+
+    } catch (error) {
+        console.error('[adjustmentHistory] Error:', error);
+        return {
+            success: false,
+            error: `Failed to get adjustment history: ${error.message}`
         };
     }
 }

@@ -246,6 +246,62 @@ class ModelSelector {
         console.log(`   Complexity Score: ${selection.complexityScore}`);
         console.log(`   Cost: $${selection.costs.input}/$${selection.costs.output} per 1M tokens`);
     }
+
+    /**
+     * Apply dynamic model adjustments from Phase 3 (Self-Adjustment)
+     * Uses A/B testing with canary rollout
+     *
+     * @param {Object} selection - Original model selection
+     * @param {string} guildId - Guild ID for adjustment lookup
+     * @param {string} executionId - Execution ID for tracking
+     * @returns {Object} Adjusted model selection (may be modified)
+     */
+    async applyDynamicAdjustments(selection, guildId, executionId) {
+        try {
+            // Lazy load to avoid circular dependency
+            const AdjustmentHistory = require('../models/AdjustmentHistory');
+
+            // Get active model_preference adjustments
+            const activeAdjustments = await AdjustmentHistory.find({
+                guildId,
+                status: 'active',
+                adjustmentType: 'model_preference',
+                rolloutStage: { $in: ['canary_5', 'canary_25', 'canary_50', 'canary_75', 'full_100'] }
+            });
+
+            if (activeAdjustments.length === 0) {
+                return selection; // No adjustments, return original
+            }
+
+            // Process each adjustment (usually just 1 active at a time)
+            for (const adjustment of activeAdjustments) {
+                // Determine if this execution is in treatment group (based on rollout %)
+                const isInTreatment = Math.random() * 100 < adjustment.rolloutProgress;
+
+                if (isInTreatment && adjustment.newConfiguration.model) {
+                    // Override model selection with adjusted model
+                    const originalModel = selection.model;
+                    selection.model = adjustment.newConfiguration.model;
+                    selection.category = 'ADJUSTED';
+                    selection.reasoning = `Dynamic adjustment: ${adjustment.description} (was: ${originalModel})`;
+                    selection.adjustmentId = adjustment._id.toString();
+                    selection.treatmentGroup = true;
+
+                    console.log(`[MODEL_SELECTOR] 🔧 Applied adjustment ${adjustment._id}: ${originalModel} → ${selection.model}`);
+                } else {
+                    // Control group - keep original selection but mark for A/B tracking
+                    selection.controlGroup = !isInTreatment;
+                    selection.adjustmentId = adjustment._id.toString();
+                }
+            }
+
+            return selection;
+
+        } catch (error) {
+            console.error('[MODEL_SELECTOR] Failed to apply dynamic adjustments:', error.message);
+            return selection; // Return original on error
+        }
+    }
 }
 
 // Export singleton instance

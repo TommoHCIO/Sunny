@@ -174,7 +174,16 @@ client.once('ready', async () => {
     } catch (error) {
         logger.error('⚠️  Failed to initialize pattern analysis job:', error);
     }
-    
+
+    // Initialize adjustment monitoring cron job (Phase 3 - AGI Learning System)
+    try {
+        const adjustmentMonitoringJob = require('./jobs/adjustmentMonitoringJob');
+        adjustmentMonitoringJob.start();
+        logger.info('✅ Adjustment monitoring job initialized (runs every hour)');
+    } catch (error) {
+        logger.error('⚠️  Failed to initialize adjustment monitoring job:', error);
+    }
+
     // Set bot status
     client.user.setPresence({
         activities: [{ name: 'The Nook 🍂', type: 3 }], // Type 3 = Watching

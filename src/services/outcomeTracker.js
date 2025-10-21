@@ -92,6 +92,9 @@ class OutcomeTracker {
 
             console.log(`[OutcomeTracker] Recorded outcome: ${outcome._id} (success: ${outcome.success}, model: ${outcome.modelUsed}, iterations: ${outcome.iterations})`);
 
+            // Phase 3: Update A/B testing metrics for active adjustments
+            await this._updateAdjustmentMetrics(interaction, outcome);
+
             return outcome;
         } catch (error) {
             console.error('[OutcomeTracker] Failed to record outcome:', error.message);
@@ -210,6 +213,58 @@ class OutcomeTracker {
         } catch (error) {
             console.error('[OutcomeTracker] Failed to get stats:', error.message);
             return null;
+        }
+    }
+
+    /**
+     * Update A/B testing metrics for active adjustments (Phase 3)
+     * 
+     * @private
+     * @param {Object} interaction - Interaction data with adjustment metadata
+     * @param {Object} outcome - Saved outcome document
+     */
+    async _updateAdjustmentMetrics(interaction, outcome) {
+        try {
+            // Check if this execution is part of an A/B test
+            if (!interaction.adjustmentId) {
+                return; // Not part of any adjustment
+            }
+
+            // Lazy load to avoid circular dependency
+            const AdjustmentHistory = require('../models/AdjustmentHistory');
+
+            // Get the adjustment
+            const adjustment = await AdjustmentHistory.findById(interaction.adjustmentId);
+
+            if (!adjustment || adjustment.status !== 'active') {
+                return; // Adjustment not found or no longer active
+            }
+
+            // Determine which group (control or treatment)
+            const isControl = interaction.controlGroup === true;
+            const isTreatment = interaction.treatmentGroup === true;
+
+            if (!isControl && !isTreatment) {
+                console.error('[OutcomeTracker] Execution has adjustmentId but no group assignment');
+                return;
+            }
+
+            // Build outcome data for metrics
+            const outcomeMetrics = {
+                success: outcome.success,
+                iterations: outcome.iterations || 0,
+                userSatisfaction: outcome.userSatisfaction || 0
+            };
+
+            // Update the appropriate group's metrics
+            const group = isControl ? 'control' : 'treatment';
+            await adjustment.updateMetrics(group, outcomeMetrics);
+
+            console.log(`[OutcomeTracker] Updated ${group} group metrics for adjustment ${adjustment._id}`);
+
+        } catch (error) {
+            console.error('[OutcomeTracker] Failed to update adjustment metrics:', error.message);
+            // Don't throw - A/B tracking failures should never break main execution
         }
     }
 }

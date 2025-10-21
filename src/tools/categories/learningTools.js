@@ -82,6 +82,107 @@ function getLearningTools(guild) {
                 properties: {},
                 required: []
             }
+        },
+        {
+            name: "propose_adjustments",
+            description: "View pending adjustment proposals from approved patterns (owner only). Part of Phase 3 - Self-Adjustment. Shows proposed autonomous improvements with human-in-the-loop approval workflow.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    adjustment_type: {
+                        type: "string",
+                        enum: ["all", "model_preference", "tool_usage", "complexity_threshold", "response_strategy"],
+                        description: "Filter by adjustment type (default: all)"
+                    }
+                },
+                required: []
+            }
+        },
+        {
+            name: "approve_adjustment",
+            description: "Approve an adjustment to start canary rollout (owner only). Starts at 5% traffic and progressively scales to 100% if A/B testing shows improvement.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    adjustment_id: {
+                        type: "string",
+                        description: "The adjustment ID to approve (get from propose_adjustments)"
+                    }
+                },
+                required: ["adjustment_id"]
+            }
+        },
+        {
+            name: "reject_adjustment",
+            description: "Reject a proposed adjustment (owner only). Prevents the adjustment from being applied and marks it as rejected.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    adjustment_id: {
+                        type: "string",
+                        description: "The adjustment ID to reject (get from propose_adjustments)"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Optional reason for rejection"
+                    }
+                },
+                required: ["adjustment_id"]
+            }
+        },
+        {
+            name: "monitor_adjustments",
+            description: "View A/B testing metrics for active adjustments (owner only). Shows control vs treatment group performance with statistical significance.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    rollout_stage: {
+                        type: "string",
+                        enum: ["all", "canary_5", "canary_25", "canary_50", "canary_75", "full_100"],
+                        description: "Filter by rollout stage (default: all active stages)"
+                    }
+                },
+                required: []
+            }
+        },
+        {
+            name: "rollback_adjustment",
+            description: "Manually trigger rollback of an active adjustment (owner only). Automatic rollback occurs if performance drops >10%.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    adjustment_id: {
+                        type: "string",
+                        description: "The adjustment ID to rollback (get from monitor_adjustments)"
+                    },
+                    reason: {
+                        type: "string",
+                        description: "Reason for manual rollback"
+                    }
+                },
+                required: ["adjustment_id", "reason"]
+            }
+        },
+        {
+            name: "adjustment_history",
+            description: "View complete adjustment history (owner only). Shows all past adjustments with outcomes, rollbacks, and A/B test results.",
+            input_schema: {
+                type: "object",
+                properties: {
+                    days: {
+                        type: "number",
+                        description: "Number of days to look back (default: 30, max: 365)",
+                        minimum: 1,
+                        maximum: 365
+                    },
+                    status: {
+                        type: "string",
+                        enum: ["all", "completed", "rolled_back", "failed", "rejected"],
+                        description: "Filter by status (default: all)"
+                    }
+                },
+                required: []
+            }
         }
     ];
 }

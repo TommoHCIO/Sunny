@@ -94,7 +94,12 @@ async function runAgent(userMessage, conversationContext, author, guild, channel
     const channelInfo = channel ? `\nCurrent channel: #${channel.name} (ID: ${channel.id}, Category: ${channel.parent?.name || 'None'})` : '';
 
     // SMART MODEL SELECTION - Choose GLM-4.6 vs GLM-4.5-Air
-    const modelSelection = modelSelector.selectModel(userMessage, conversationContext, isUserOwner);
+    let modelSelection = modelSelector.selectModel(userMessage, conversationContext, isUserOwner);
+    
+    // Phase 3: Apply dynamic adjustments for A/B testing
+    if (guild && executionId) {
+        modelSelection = await modelSelector.applyDynamicAdjustments(modelSelection, guild.id, executionId);
+    }
     
     // Log to console (visible in Render logs)
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -105,6 +110,9 @@ async function runAgent(userMessage, conversationContext, author, guild, channel
     console.log(`🤖 [MODEL_SELECTOR] Complexity: ${modelSelection.messageComplexity}`);
     console.log(`🤖 [MODEL_SELECTOR] Score: ${modelSelection.complexityScore}`);
     console.log(`💰 [MODEL_SELECTOR] Cost: ${modelSelection.costs.input}/${modelSelection.costs.output} per 1M tokens`);
+    if (modelSelection.adjustmentId) {
+        console.log(`🔧 [MODEL_SELECTOR] A/B Test: ${modelSelection.treatmentGroup ? 'TREATMENT' : 'CONTROL'} group (adjustment ${modelSelection.adjustmentId.substring(0, 8)})`);
+    }
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     // Get selected model
@@ -188,7 +196,11 @@ User message: ${userMessage}`
         iterations: 0,
         toolsUsed: [],
         errors: [],
-        finishReason: null
+        finishReason: null,
+        // Phase 3: Include adjustment metadata for A/B testing
+        adjustmentId: modelSelection.adjustmentId || null,
+        controlGroup: modelSelection.controlGroup || false,
+        treatmentGroup: modelSelection.treatmentGroup || false
     } : null;
 
     try {
