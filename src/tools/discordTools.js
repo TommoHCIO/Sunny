@@ -3,7 +3,7 @@
  * Discord Tool Definitions for Claude AI Agent
  * Aggregates all Discord operations from modular category files
  * 
- * This file imports and combines tools from 11 focused modules:
+ * This file imports and combines tools from 12 focused modules:
  * - inspectionTools: Server inspection and information retrieval
  * - channelTools: Channel management, voice/stage, permissions, forums
  * - roleTools: Role management, permissions, and hierarchy
@@ -16,6 +16,7 @@
  * - autoMessageTools: Automatic message management (welcome, goodbye, scheduled, etc.)
  * - ticketTools: Thread-based ticketing system with transcripts
  * - gameTools: Interactive games, trivia, polls, and entertainment features
+ * - learningTools: AGI learning system statistics and monitoring
  */
 
 const { getInspectionTools } = require('./categories/inspectionTools');
@@ -30,6 +31,7 @@ const { getServerTools } = require('./categories/serverTools');
 const { getAutoMessageTools } = require('./categories/autoMessageTools');
 const { getTicketTools } = require('./categories/ticketTools');
 const { getGameTools } = require('./categories/gameTools');
+const { getLearningTools } = require('./categories/learningTools');
 
 /**
  * Get all Discord tools available to Claude
@@ -49,7 +51,8 @@ function getDiscordTools(guild) {
         ...getServerTools(guild),
         ...getAutoMessageTools(guild),
         ...getTicketTools(guild),
-        ...getGameTools(guild)
+        ...getGameTools(guild),
+        ...getLearningTools(guild)
     ];
 }
 

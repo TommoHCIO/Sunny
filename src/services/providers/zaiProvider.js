@@ -25,6 +25,15 @@ const client = new OpenAI({
 
 let personalityPrompt = null;
 
+// ============================================================================
+// OUTCOME TRACKER - Module-level metadata cache for AGI learning system
+// ============================================================================
+// Stores execution metadata keyed by executionId for outcome tracking.
+// Auto-cleanup after 5 minutes prevents memory leaks.
+// Pattern validated: https://nodejs.org/api/timers.html#timers_cleartimeout_timeout
+const executionMetadata = new Map();
+const METADATA_TTL = 300000; // 5 minutes
+
 /**
  * Load personality prompt from configuration file
  */
@@ -63,8 +72,9 @@ Keep responses concise (2-4 sentences usually) but complete. Be genuinely helpfu
 /**
  * Run the AI agent with agentic loop (Z.AI GLM)
  * @param {EventEmitter} statusEmitter - Optional EventEmitter for real-time status updates
+ * @param {string} executionId - Optional execution ID for outcome tracking (AGI learning system)
  */
-async function runAgent(userMessage, conversationContext, author, guild, channel, statusEmitter = null) {
+async function runAgent(userMessage, conversationContext, author, guild, channel, statusEmitter = null, executionId = null) {
     const personality = await loadPersonality();
 
     // Check if user is owner
@@ -169,12 +179,29 @@ User message: ${userMessage}`
     const maxLoops = 100; // Increased from 50 - no time limit, only iteration limit
     let lastProgressLog = Date.now();
 
+    // Initialize metadata tracking for AGI learning system
+    const metadata = executionId ? {
+        modelUsed: selectedModel,
+        modelReasoning: modelSelection.reasoning,
+        complexityScore: modelSelection.complexityScore,
+        predictedComplexity: modelSelection.messageComplexity,
+        iterations: 0,
+        toolsUsed: [],
+        errors: [],
+        finishReason: null
+    } : null;
+
     try {
         // AGENTIC LOOP - OpenAI/Z.AI style
         // NO TIME LIMIT - only iteration limit to prevent infinite loops
         while (loopCount < maxLoops) {
             loopCount++;
             const elapsedTime = Date.now() - startTime;
+
+            // Track iteration count for AGI learning
+            if (metadata) {
+                metadata.iterations = loopCount;
+            }
             
             // Log progress every 10 seconds to detect hangs (Render visibility)
             if (Date.now() - lastProgressLog > 10000) {
@@ -272,6 +299,15 @@ User message: ${userMessage}`
                     });
                 }
 
+                // Save metadata to cache for outcome tracking (AGI learning)
+                if (metadata && executionId) {
+                    metadata.finishReason = finishReason;
+                    executionMetadata.set(executionId, metadata);
+                    // Auto-cleanup after TTL to prevent memory leaks
+                    setTimeout(() => executionMetadata.delete(executionId), METADATA_TTL);
+                    console.log(`📊 [OUTCOME_TRACKER] Metadata cached for execution ${executionId.substring(0, 8)}`);
+                }
+
                 return finalText;
             }
 
@@ -299,6 +335,11 @@ User message: ${userMessage}`
                             });
                         }
 
+                        // Track tool usage for AGI learning
+                        if (metadata && !metadata.toolsUsed.includes(toolCall.function.name)) {
+                            metadata.toolsUsed.push(toolCall.function.name);
+                        }
+
                         // Execute tool
                         const result = await toolExecutor.execute(
                             toolCall.function.name,
@@ -319,6 +360,14 @@ User message: ${userMessage}`
                         });
                     } catch (error) {
                         console.error(`  ✗ Tool execution error:`, error);
+
+                        // Track errors for AGI learning
+                        if (metadata) {
+                            metadata.errors.push({
+                                tool: toolCall.function.name,
+                                error: error.message
+                            });
+                        }
 
                         toolResults.push({
                             role: 'tool',
@@ -402,7 +451,17 @@ function convertToolsToOpenAIFormat(anthropicTools) {
     }));
 }
 
+/**
+ * Get execution metadata for outcome tracking (AGI learning system)
+ * @param {string} executionId - Execution ID to retrieve metadata for
+ * @returns {Object|null} Metadata object or null if not found
+ */
+function getExecutionMetadata(executionId) {
+    return executionMetadata.get(executionId) || null;
+}
+
 module.exports = {
     runAgent,
-    loadPersonality
+    loadPersonality,
+    getExecutionMetadata
 };

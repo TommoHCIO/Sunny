@@ -18,10 +18,58 @@ const channelMemberTools = require('./channelMemberTools');
 const autoMessageService = require('../services/autoMessageService');
 const ticketService = require('../services/ticketService');
 const gameService = require('../services/gameService');
+const outcomeTracker = require('../services/outcomeTracker');
 const ServerSettings = require('../models/ServerSettings');
+const ToolExecution = require('../models/ToolExecution');
+const crypto = require('crypto');
 
 // Initialize action handler (singleton pattern)
 let actionHandler = null;
+
+/**
+ * Record tool execution for AGI learning system
+ * Fire-and-forget pattern - never blocks tool execution
+ * @param {Object} executionData - Tool execution data
+ */
+async function recordToolExecution(executionData) {
+    try {
+        await ToolExecution.create(executionData);
+    } catch (error) {
+        // Graceful degradation - logging failure doesn't break tool execution
+        console.error('[ToolExecutor] Failed to record execution:', error.message);
+    }
+}
+
+/**
+ * Classify error type for pattern analysis
+ * @param {string} errorMessage - Error message from tool execution
+ * @returns {string|null} Error type category
+ */
+function classifyErrorType(errorMessage) {
+    if (!errorMessage) return null;
+    
+    const msg = errorMessage.toLowerCase();
+    if (msg.includes('permission') || msg.includes('missing access')) return 'permission';
+    if (msg.includes('rate limit') || msg.includes('too many')) return 'rate_limit';
+    if (msg.includes('invalid') || msg.includes('required')) return 'invalid_args';
+    if (msg.includes('timeout') || msg.includes('timed out')) return 'timeout';
+    if (msg.includes('api') || msg.includes('discord')) return 'api_error';
+    return 'unknown';
+}
+
+/**
+ * Hash tool arguments for pattern detection without storing sensitive data
+ * @param {Object} args - Tool arguments
+ * @returns {string} SHA256 hash of stringified args
+ */
+function hashArguments(args) {
+    try {
+        const argsString = JSON.stringify(args);
+        return crypto.createHash('sha256').update(argsString).digest('hex').substring(0, 16);
+    } catch (error) {
+        return null;
+    }
+}
 
 /**
  * Execute a Discord tool based on Claude's request
@@ -29,9 +77,11 @@ let actionHandler = null;
  * @param {Object} input - Tool input parameters
  * @param {Object} guild - Discord guild object
  * @param {Object} author - Discord user object (for permission checks)
+ * @param {string} executionId - Optional execution ID for linking to Outcome tracking
  * @returns {Promise<Object>} Tool execution result
  */
-async function execute(toolName, input, guild, author) {
+async function execute(toolName, input, guild, author, executionId = null) {
+    const startTime = Date.now();
     // Initialize action handler if needed
     if (!actionHandler) {
         // Create a minimal client object for ActionHandler
@@ -67,15 +117,35 @@ async function execute(toolName, input, guild, author) {
         // Auto message and ticketing tools
         'create_auto_message', 'update_auto_message', 'delete_auto_message', 'enable_auto_messages', 'disable_auto_messages',
         'create_ticket', 'close_ticket', 'assign_ticket', 'update_ticket_priority', 'add_ticket_tag',
-        'enable_ticketing', 'disable_ticketing', 'configure_ticket_categories'
+        'enable_ticketing', 'disable_ticketing', 'configure_ticket_categories',
+        // AGI learning system tools
+        'analyze_outcomes', 'get_learning_stats'
     ];
 
     // Permission check for owner-only tools
     if (ownerOnlyTools.includes(toolName) && !isOwner(author.id)) {
         console.log(`❌ Permission denied: ${author.username} tried to use ${toolName}`);
+        
+        const errorMsg = `Only the server owner can use ${toolName}. This action requires elevated permissions to keep the server safe! 🍂`;
+        const duration = Date.now() - startTime;
+        
+        // Record permission denied execution (fire-and-forget)
+        recordToolExecution({
+            timestamp: new Date(),
+            toolName,
+            success: false,
+            errorMessage: 'Permission denied',
+            errorType: 'permission',
+            duration,
+            userId: author.id,
+            guildId: guild.id,
+            executionId,
+            argsHash: hashArguments(input)
+        }).catch(() => {}); // Graceful degradation
+        
         return {
             success: false,
-            error: `Only the server owner can use ${toolName}. This action requires elevated permissions to keep the server safe! 🍂`,
+            error: errorMsg,
             permission_denied: true
         };
     }
@@ -88,8 +158,23 @@ async function execute(toolName, input, guild, author) {
         // Route tool to appropriate handler
         switch (toolName) {
             // ===== SERVER INSPECTION TOOLS =====
-            case 'list_channels':
-                return await listChannels(guild, input);
+            case 'list_channels': {
+                const result = await listChannels(guild, input);
+                const duration = Date.now() - startTime;
+                recordToolExecution({
+                    timestamp: new Date(),
+                    toolName,
+                    success: result?.success !== false,
+                    errorMessage: result?.error || null,
+                    errorType: result?.error ? classifyErrorType(result.error) : null,
+                    duration,
+                    userId: author.id,
+                    guildId: guild.id,
+                    executionId,
+                    argsHash: hashArguments(input)
+                }).catch(() => {});
+                return result;
+            }
 
             case 'list_roles':
                 return await listRoles(guild, input);
@@ -101,8 +186,23 @@ async function execute(toolName, input, guild, author) {
                 return await getChannelInfo(guild, input);
 
             // ===== CHANNEL MANAGEMENT =====
-            case 'create_channel':
-                return await actionHandler.createChannel(guild, input);
+            case 'create_channel': {
+                const result = await actionHandler.createChannel(guild, input);
+                const duration = Date.now() - startTime;
+                recordToolExecution({
+                    timestamp: new Date(),
+                    toolName,
+                    success: result?.success !== false,
+                    errorMessage: result?.error || null,
+                    errorType: result?.error ? classifyErrorType(result.error) : null,
+                    duration,
+                    userId: author.id,
+                    guildId: guild.id,
+                    executionId,
+                    argsHash: hashArguments(input)
+                }).catch(() => {});
+                return result;
+            }
 
             case 'delete_channel':
                 return await actionHandler.deleteChannel(guild, input);
@@ -141,8 +241,23 @@ async function execute(toolName, input, guild, author) {
             case 'set_role_color':
                 return await actionHandler.setRoleColor(guild, input);
 
-            case 'assign_role':
-                return await assignRole(guild, author, input);
+            case 'assign_role': {
+                const result = await assignRole(guild, author, input);
+                const duration = Date.now() - startTime;
+                recordToolExecution({
+                    timestamp: new Date(),
+                    toolName,
+                    success: result?.success !== false,
+                    errorMessage: result?.error || null,
+                    errorType: result?.error ? classifyErrorType(result.error) : null,
+                    duration,
+                    userId: author.id,
+                    guildId: guild.id,
+                    executionId,
+                    argsHash: hashArguments(input)
+                }).catch(() => {});
+                return result;
+            }
 
             case 'remove_role':
                 return await removeRole(guild, author, input);
@@ -154,8 +269,23 @@ async function execute(toolName, input, guild, author) {
             case 'remove_timeout':
                 return await actionHandler.removeTimeout(guild, input);
 
-            case 'kick_member':
-                return await actionHandler.kickMember(guild, input);
+            case 'kick_member': {
+                const result = await actionHandler.kickMember(guild, input);
+                const duration = Date.now() - startTime;
+                recordToolExecution({
+                    timestamp: new Date(),
+                    toolName,
+                    success: result?.success !== false,
+                    errorMessage: result?.error || null,
+                    errorType: result?.error ? classifyErrorType(result.error) : null,
+                    duration,
+                    userId: author.id,
+                    guildId: guild.id,
+                    executionId,
+                    argsHash: hashArguments(input)
+                }).catch(() => {});
+                return result;
+            }
 
             case 'ban_member':
                 return await actionHandler.banMember(guild, input);
@@ -203,8 +333,23 @@ async function execute(toolName, input, guild, author) {
                 return await actionHandler.editEmoji(guild, input);
 
             // ===== MESSAGE MANAGEMENT =====
-            case 'send_message':
-                return await sendMessage(guild, input);
+            case 'send_message': {
+                const result = await sendMessage(guild, input);
+                const duration = Date.now() - startTime;
+                recordToolExecution({
+                    timestamp: new Date(),
+                    toolName,
+                    success: result?.success !== false,
+                    errorMessage: result?.error || null,
+                    errorType: result?.error ? classifyErrorType(result.error) : null,
+                    duration,
+                    userId: author.id,
+                    guildId: guild.id,
+                    executionId,
+                    argsHash: hashArguments(input)
+                }).catch(() => {});
+                return result;
+            }
 
             case 'send_embed':
                 return await sendEmbed(guild, input);
@@ -367,8 +512,23 @@ async function execute(toolName, input, guild, author) {
                 return await getBans(guild, input);
 
             // ===== SERVER INSPECTION TOOLS (#94-98) =====
-            case 'get_server_info':
-                return await serverInspection.getServerInfo(guild);
+            case 'get_server_info': {
+                const result = await serverInspection.getServerInfo(guild);
+                const duration = Date.now() - startTime;
+                recordToolExecution({
+                    timestamp: new Date(),
+                    toolName,
+                    success: result?.success !== false,
+                    errorMessage: result?.error || null,
+                    errorType: result?.error ? classifyErrorType(result.error) : null,
+                    duration,
+                    userId: author.id,
+                    guildId: guild.id,
+                    executionId,
+                    argsHash: hashArguments(input)
+                }).catch(() => {});
+                return result;
+            }
 
             case 'get_server_settings':
                 return await serverInspection.getServerSettings(guild);
@@ -386,8 +546,23 @@ async function execute(toolName, input, guild, author) {
                 return await auditPermissions(guild, input);
 
             // ===== MEMBER MANAGEMENT TOOLS (#99-103) =====
-            case 'get_member_info':
-                return await memberManagement.getMemberInfo(guild, input);
+            case 'get_member_info': {
+                const result = await memberManagement.getMemberInfo(guild, input);
+                const duration = Date.now() - startTime;
+                recordToolExecution({
+                    timestamp: new Date(),
+                    toolName,
+                    success: result?.success !== false,
+                    errorMessage: result?.error || null,
+                    errorType: result?.error ? classifyErrorType(result.error) : null,
+                    duration,
+                    userId: author.id,
+                    guildId: guild.id,
+                    executionId,
+                    argsHash: hashArguments(input)
+                }).catch(() => {});
+                return result;
+            }
 
             case 'get_member_roles':
                 return await memberManagement.getMemberRoles(guild, input);
@@ -482,8 +657,23 @@ async function execute(toolName, input, guild, author) {
                 });
 
             // ===== AUTOMATIC MESSAGE TOOLS =====
-            case 'create_auto_message':
-                return await createAutoMessage(guild, input);
+            case 'create_auto_message': {
+                const result = await createAutoMessage(guild, input);
+                const duration = Date.now() - startTime;
+                recordToolExecution({
+                    timestamp: new Date(),
+                    toolName,
+                    success: result?.success !== false,
+                    errorMessage: result?.error || null,
+                    errorType: result?.error ? classifyErrorType(result.error) : null,
+                    duration,
+                    userId: author.id,
+                    guildId: guild.id,
+                    executionId,
+                    argsHash: hashArguments(input)
+                }).catch(() => {});
+                return result;
+            }
 
             case 'list_auto_messages':
                 return await listAutoMessages(guild, input);
@@ -504,8 +694,23 @@ async function execute(toolName, input, guild, author) {
                 return await disableAutoMessages(guild, input);
 
             // ===== TICKETING SYSTEM TOOLS =====
-            case 'create_ticket':
-                return await createTicket(guild, input);
+            case 'create_ticket': {
+                const result = await createTicket(guild, input);
+                const duration = Date.now() - startTime;
+                recordToolExecution({
+                    timestamp: new Date(),
+                    toolName,
+                    success: result?.success !== false,
+                    errorMessage: result?.error || null,
+                    errorType: result?.error ? classifyErrorType(result.error) : null,
+                    duration,
+                    userId: author.id,
+                    guildId: guild.id,
+                    executionId,
+                    argsHash: hashArguments(input)
+                }).catch(() => {});
+                return result;
+            }
 
             case 'close_ticket':
                 return await closeTicket(guild, input);
@@ -538,8 +743,23 @@ async function execute(toolName, input, guild, author) {
                 return await configureTicketCategories(guild, input);
 
             // ===== GAME AND ENTERTAINMENT TOOLS =====
-            case 'generate_trivia_question':
-                return await generateSingleTriviaQuestion(guild, input);
+            case 'generate_trivia_question': {
+                const result = await generateSingleTriviaQuestion(guild, input);
+                const duration = Date.now() - startTime;
+                recordToolExecution({
+                    timestamp: new Date(),
+                    toolName,
+                    success: result?.success !== false,
+                    errorMessage: result?.error || null,
+                    errorType: result?.error ? classifyErrorType(result.error) : null,
+                    duration,
+                    userId: author.id,
+                    guildId: guild.id,
+                    executionId,
+                    argsHash: hashArguments(input)
+                }).catch(() => {});
+                return result;
+            }
 
             case 'start_trivia':
                 return await startTrivia(guild, input);
@@ -577,6 +797,13 @@ async function execute(toolName, input, guild, author) {
             case 'get_user_game_stats':
                 return await getUserGameStats(guild, input);
 
+            // ===== AGI LEARNING SYSTEM TOOLS =====
+            case 'analyze_outcomes':
+                return await analyzeOutcomes(guild, input);
+
+            case 'get_learning_stats':
+                return await getLearningStats(guild, input);
+
             default:
                 console.error(`❌ Unknown tool: ${toolName}`);
                 return {
@@ -586,6 +813,24 @@ async function execute(toolName, input, guild, author) {
         }
     } catch (error) {
         console.error(`❌ Error executing tool ${toolName}:`, error);
+        
+        const duration = Date.now() - startTime;
+        const errorMsg = error.message;
+        
+        // Record failed execution (fire-and-forget)
+        recordToolExecution({
+            timestamp: new Date(),
+            toolName,
+            success: false,
+            errorMessage: errorMsg,
+            errorType: classifyErrorType(errorMsg),
+            duration,
+            userId: author.id,
+            guildId: guild.id,
+            executionId,
+            argsHash: hashArguments(input)
+        }).catch(() => {}); // Graceful degradation
+        
         return {
             success: false,
             error: error.message,
@@ -3180,6 +3425,291 @@ async function getUserGameStats(guild, input) {
         };
     } catch (error) {
         return { success: false, error: `Failed to get user game stats: ${error.message}` };
+    }
+}
+
+// ===== AGI LEARNING SYSTEM TOOL IMPLEMENTATIONS =====
+
+/**
+ * Analyze AI interaction outcomes for learning insights
+ * @param {Guild} guild - Discord guild object
+ * @param {Object} input - Tool input parameters
+ * @returns {Promise<Object>} Analysis results
+ */
+async function analyzeOutcomes(guild, input) {
+    try {
+        const days = Math.min(input.days || 7, 30); // Default 7 days, max 30
+        const filterBy = input.filter_by || 'all';
+
+        // Build filters for getRecentOutcomes
+        const filters = { guildId: guild.id };
+        const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        filters.timestamp = { $gte: since };
+
+        if (filterBy === 'successful') {
+            filters.success = true;
+        } else if (filterBy === 'failed') {
+            filters.success = false;
+        } else if (filterBy === 'positive_feedback') {
+            filters.userSatisfaction = 1;
+        } else if (filterBy === 'negative_feedback') {
+            filters.userSatisfaction = -1;
+        }
+
+        // Get statistics and recent outcomes
+        const [stats, outcomes] = await Promise.all([
+            outcomeTracker.getStats(days),
+            outcomeTracker.getRecentOutcomes(filters, 1000)
+        ]);
+
+        if (!stats || stats.total === 0) {
+            return {
+                success: true,
+                analysis: {
+                    period_days: days,
+                    filter: filterBy,
+                    message: `No interaction data found for the last ${days} days.`,
+                    total_interactions: 0
+                }
+            };
+        }
+
+        // Analyze tool usage
+        const toolUsage = {};
+        const errorBreakdown = {};
+        let totalTools = 0;
+
+        for (const outcome of outcomes) {
+            // Count tool usage
+            if (outcome.toolsUsed && outcome.toolsUsed.length > 0) {
+                for (const tool of outcome.toolsUsed) {
+                    toolUsage[tool] = (toolUsage[tool] || 0) + 1;
+                    totalTools++;
+                }
+            }
+
+            // Count errors
+            if (outcome.errors && outcome.errors.length > 0) {
+                for (const error of outcome.errors) {
+                    const errorKey = error.tool || 'unknown';
+                    if (!errorBreakdown[errorKey]) {
+                        errorBreakdown[errorKey] = [];
+                    }
+                    errorBreakdown[errorKey].push(error.error);
+                }
+            }
+        }
+
+        // Get top 10 most used tools
+        const topTools = Object.entries(toolUsage)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10)
+            .map(([tool, count]) => ({ tool, count }));
+
+        // Get most common errors (top 5)
+        const commonErrors = Object.entries(errorBreakdown)
+            .map(([tool, errors]) => ({
+                tool,
+                count: errors.length,
+                sample_error: errors[0]
+            }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5);
+
+        // Build response
+        return {
+            success: true,
+            analysis: {
+                period_days: days,
+                filter: filterBy,
+                total_interactions: stats.total,
+                success_rate: `${(stats.successRate * 100).toFixed(1)}%`,
+                avg_iterations: stats.avgIterations.toFixed(2),
+                avg_duration_ms: stats.avgDuration ? Math.round(stats.avgDuration) : null,
+                model_usage: stats.modelUsage,
+                user_satisfaction: {
+                    positive: stats.satisfaction.positive,
+                    negative: stats.satisfaction.negative,
+                    no_reaction: stats.satisfaction.noReaction,
+                    positive_rate: stats.total > 0 ? `${((stats.satisfaction.positive / stats.total) * 100).toFixed(1)}%` : '0%'
+                },
+                top_tools_used: topTools,
+                total_tool_executions: totalTools,
+                common_errors: commonErrors.length > 0 ? commonErrors : 'No errors in this period'
+            }
+        };
+    } catch (error) {
+        console.error('[analyzeOutcomes] Error:', error);
+        return {
+            success: false,
+            error: `Failed to analyze outcomes: ${error.message}`
+        };
+    }
+}
+
+// ===== AGI LEARNING SYSTEM IMPLEMENTATIONS =====
+
+/**
+ * Get learning system statistics
+ * Provides quick overview of data collection and system health
+ * @param {Guild} guild - Discord guild
+ * @param {Object} input - Tool input (metric type)
+ * @returns {Promise<Object>} Statistics result
+ */
+async function getLearningStats(guild, input) {
+    try {
+        const Outcome = require('../models/Outcome');
+        const ToolExecution = require('../models/ToolExecution');
+        
+        const metric = input.metric || 'summary';
+        const guildId = guild.id;
+        
+        // Shared: Get earliest data collection timestamp
+        const firstOutcome = await Outcome.findOne({ guildId }).sort({ timestamp: 1 }).lean();
+        const dataSince = firstOutcome ? firstOutcome.timestamp : new Date();
+        const daysCollecting = Math.floor((Date.now() - dataSince.getTime()) / (1000 * 60 * 60 * 24));
+        
+        switch (metric) {
+            case 'summary': {
+                // Total counts
+                const totalOutcomes = await Outcome.countDocuments({ guildId });
+                const totalToolExecs = await ToolExecution.countDocuments({ guildId });
+                
+                // Progress to 100 sample minimum (Phase 1 goal)
+                const progress = Math.min(100, Math.floor((totalOutcomes / 100) * 100));
+                
+                return {
+                    success: true,
+                    summary: `Learning System Health\n` +
+                             `Data Points: ${totalOutcomes} outcomes, ${totalToolExecs} tool executions\n` +
+                             `Collecting Since: ${daysCollecting} days ago\n` +
+                             `Progress: ${progress}% to 100-sample minimum\n` +
+                             `Status: ${totalOutcomes >= 100 ? 'Ready for analysis' : 'Collecting data...'}`,
+                    stats: {
+                        totalOutcomes,
+                        totalToolExecs,
+                        daysCollecting,
+                        progress,
+                        ready: totalOutcomes >= 100
+                    }
+                };
+            }
+            
+            case 'models': {
+                // Model selection accuracy and performance
+                const modelStats = await Outcome.aggregate([
+                    { $match: { guildId } },
+                    {
+                        $group: {
+                            _id: '$modelUsed',
+                            count: { $sum: 1 },
+                            successRate: {
+                                $avg: { $cond: ['$success', 1, 0] }
+                            },
+                            avgIterations: { $avg: '$iterations' }
+                        }
+                    },
+                    { $sort: { count: -1 } }
+                ]);
+                
+                const modelLines = modelStats.map(m => 
+                    `${m._id || 'unknown'}: ${m.count} uses, ` +
+                    `${(m.successRate * 100).toFixed(1)}% success, ` +
+                    `${m.avgIterations.toFixed(1)} avg iterations`
+                ).join('\n');
+                
+                return {
+                    success: true,
+                    summary: `Model Performance\n${modelLines || 'No data yet'}`,
+                    stats: modelStats
+                };
+            }
+            
+            case 'tools': {
+                // Top used and failed tools
+                const topUsed = await ToolExecution.aggregate([
+                    { $match: { guildId } },
+                    {
+                        $group: {
+                            _id: '$toolName',
+                            count: { $sum: 1 }
+                        }
+                    },
+                    { $sort: { count: -1 } },
+                    { $limit: 10 }
+                ]);
+                
+                const topFailed = await ToolExecution.aggregate([
+                    { $match: { guildId, success: false } },
+                    {
+                        $group: {
+                            _id: '$toolName',
+                            failures: { $sum: 1 }
+                        }
+                    },
+                    { $sort: { failures: -1 } },
+                    { $limit: 5 }
+                ]);
+                
+                const usedLines = topUsed.map(t => `${t._id}: ${t.count}`).join(', ');
+                const failedLines = topFailed.map(t => `${t._id}: ${t.failures}`).join(', ');
+                
+                return {
+                    success: true,
+                    summary: `Tool Usage\n` +
+                             `Top 10: ${usedLines || 'No data'}\n` +
+                             `Failed: ${failedLines || 'None'}`,
+                    stats: { topUsed, topFailed }
+                };
+            }
+            
+            case 'satisfaction': {
+                // User reaction statistics
+                const reactionStats = await Outcome.aggregate([
+                    { $match: { guildId } },
+                    {
+                        $group: {
+                            _id: null,
+                            total: { $sum: 1 },
+                            reacted: {
+                                $sum: { $cond: ['$userReacted', 1, 0] }
+                            },
+                            positive: {
+                                $sum: { $cond: [{ $eq: ['$userSatisfaction', 1] }, 1, 0] }
+                            },
+                            negative: {
+                                $sum: { $cond: [{ $eq: ['$userSatisfaction', -1] }, 1, 0] }
+                            }
+                        }
+                    }
+                ]);
+                
+                const stats = reactionStats[0] || { total: 0, reacted: 0, positive: 0, negative: 0 };
+                const reactionRate = stats.total > 0 ? (stats.reacted / stats.total * 100).toFixed(1) : 0;
+                const ratio = stats.negative > 0 ? (stats.positive / stats.negative).toFixed(1) : stats.positive;
+                
+                return {
+                    success: true,
+                    summary: `User Satisfaction\n` +
+                             `Reaction Rate: ${reactionRate}% (${stats.reacted}/${stats.total})\n` +
+                             `Positive: ${stats.positive}, Negative: ${stats.negative}\n` +
+                             `Ratio: ${ratio}:1 (positive:negative)`,
+                    stats
+                };
+            }
+            
+            default:
+                return {
+                    success: false,
+                    error: `Unknown metric type: ${metric}. Use: summary, models, tools, satisfaction`
+                };
+        }
+    } catch (error) {
+        console.error('[getLearningStats] Error:', error);
+        return {
+            success: false,
+            error: `Failed to get learning stats: ${error.message}`
+        };
     }
 }
 

@@ -8,6 +8,9 @@ const moderationService = require('../services/moderationService');
 const statusService = require('../services/statusService');
 const { splitMessage } = require('../utils/messageSplitter');
 const memoryService = require('../services/memoryService');
+const outcomeTracker = require('../services/outcomeTracker');
+const messageComplexity = require('../utils/messageComplexity');
+const { getExecutionMetadata } = require('../services/providers/zaiProvider');
 
 // Bot startup time - used to filter out old messages
 const BOT_START_TIME = Date.now();
@@ -153,6 +156,27 @@ module.exports = async function handleMessage(client, message) {
             triggerResult.replyContext
         );
 
+        // Initialize interaction tracking for outcome learning
+        const interaction = {
+            startTime: Date.now(),
+            userId: message.author.id,
+            guildId: message.guild.id,
+            channelId: message.channel.id,
+            query: message.content,
+            hasAttachments: message.attachments.size > 0,
+            executionId: executionId,
+            instanceId: debugService.getInstanceInfo().instanceId,
+            success: false
+        };
+
+        // Capture predicted complexity for learning
+        const complexitySummary = messageComplexity.getComplexitySummary(
+            message.content,
+            interaction.hasAttachments
+        );
+        interaction.predictedComplexity = complexitySummary.complexity;
+        interaction.complexityScore = complexitySummary.score;
+
         await debugService.logMessageFlow('agent_start', message.id, {
             'Context Length': `${context.length} chars`,
             'User Message': message.content
@@ -167,13 +191,29 @@ module.exports = async function handleMessage(client, message) {
             message.author,
             message.guild,
             message.channel,
-            statusEmitter  // Pass event emitter for real-time status updates
+            statusEmitter,  // Pass event emitter for real-time status updates
+            executionId     // Pass executionId for outcome tracking (AGI learning)
         );
 
         const processingTime = Date.now() - startTime;
         console.log(`📨 Received finalResponse from agent (${processingTime}ms)`);
         console.log(`   Length: ${finalResponse?.length || 0} chars`);
         console.log(`   Preview: ${finalResponse?.substring(0, 100)}...`);
+
+        // Capture execution metadata for outcome tracking
+        const metadata = getExecutionMetadata(executionId);
+        if (metadata) {
+            interaction.modelUsed = metadata.modelUsed;
+            interaction.modelReasoning = metadata.modelReasoning;
+            interaction.complexityScore = metadata.complexityScore;
+            interaction.iterations = metadata.iterations;
+            interaction.toolsUsed = metadata.toolsUsed;
+            interaction.errors = metadata.errors;
+            interaction.finishReason = metadata.finishReason;
+        }
+        interaction.duration = Date.now() - interaction.startTime;
+        interaction.success = !!finalResponse && !finalResponse.includes('Something went wrong');
+        interaction.responseLength = finalResponse?.length || 0;
 
         await debugService.logMessageFlow('agent_complete', message.id, {
             'Response Length': `${finalResponse?.length || 0} chars`,
@@ -254,6 +294,47 @@ module.exports = async function handleMessage(client, message) {
             // Add all sent messages to context
             for (const sentMessage of sentMessages) {
                 await contextService.addMessage(message.channel.id, sentMessage);
+            }
+
+            // Add user satisfaction tracking (thumbs up/down reactions)
+            // Fire-and-forget - failures won't break main execution
+            if (firstMessage || sentMessages[0]) {
+                const targetMessage = firstMessage || sentMessages[0];
+                try {
+                    // Add reaction options for user feedback
+                    await targetMessage.react('👍');
+                    await targetMessage.react('👎');
+
+                    // Create reaction collector with 60-second timeout (Discord.js best practice)
+                    const filter = (reaction, user) =>
+                        ['👍', '👎'].includes(reaction.emoji.name) &&
+                        user.id === message.author.id;
+
+                    const collector = targetMessage.createReactionCollector({
+                        filter,
+                        time: 60000, // 60 seconds
+                        max: 1 // Only collect first reaction
+                    });
+
+                    collector.on('collect', (reaction) => {
+                        interaction.userSatisfaction = reaction.emoji.name === '👍' ? 1 : -1;
+                        interaction.userReacted = true;
+                        console.log(`📊 User reaction captured: ${reaction.emoji.name}`);
+                    });
+
+                    collector.on('end', async (collected, reason) => {
+                        console.log(`📊 Reaction collector ended (${reason}), recording outcome...`);
+                        // Fire-and-forget outcome recording - never blocks
+                        outcomeTracker.recordOutcome(interaction).catch(err =>
+                            console.error('[messageHandler] Failed to save outcome:', err)
+                        );
+                    });
+                } catch (reactionError) {
+                    // Reaction tracking failed (e.g., message deleted, permissions)
+                    console.error('[messageHandler] Failed to add satisfaction tracking:', reactionError);
+                    // Still record outcome without user satisfaction
+                    outcomeTracker.recordOutcome(interaction).catch(() => {});
+                }
             }
         } else {
             console.log(`⚠️  finalResponse was empty/null`);

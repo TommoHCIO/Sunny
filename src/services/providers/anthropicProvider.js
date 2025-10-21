@@ -60,8 +60,18 @@ Keep responses concise (2-4 sentences usually) but complete. Be genuinely helpfu
 
 /**
  * Run the AI agent with agentic loop (Anthropic Claude)
+ * 
+ * @param {string} userMessage - The user's message to process
+ * @param {string} conversationContext - Previous conversation history
+ * @param {Object} author - Discord user object
+ * @param {Object} guild - Discord guild object
+ * @param {Object} channel - Discord channel object
+ * @param {EventEmitter} statusEmitter - Optional event emitter for status updates
+ * @param {string} executionId - Optional execution ID for outcome tracking (future implementation)
  */
-async function runAgent(userMessage, conversationContext, author, guild, channel) {
+async function runAgent(userMessage, conversationContext, author, guild, channel, statusEmitter = null, executionId = null) {
+    // Note: executionId parameter included for compatibility with multi-provider architecture
+    // Future enhancement: Implement outcome tracking similar to zaiProvider.js
     const personality = await loadPersonality();
 
     // Check if user is owner (supports multiple owners)

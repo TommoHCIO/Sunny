@@ -33,9 +33,9 @@ const { getAIProvider } = require('./aiProviderFactory');
  * @returns {Promise<string>} Final text response to send to user
  * @throws {Error} On configuration or API errors
  */
-async function runAgent(userMessage, conversationContext, author, guild, channel, statusEmitter = null) {
+async function runAgent(userMessage, conversationContext, author, guild, channel, statusEmitter = null, executionId = null) {
     const provider = getAIProvider();
-    return await provider.runAgent(userMessage, conversationContext, author, guild, channel, statusEmitter);
+    return await provider.runAgent(userMessage, conversationContext, author, guild, channel, statusEmitter, executionId);
 }
 
 /**
