@@ -16,7 +16,10 @@ const Outcome = require('../models/Outcome');
 
 let isRunning = false;
 
-const job = cron.schedule('0 0 * * 0', async () => {
+/**
+ * Core analysis task (called by cron job and manual trigger)
+ */
+async function runAnalysisTask() {
     // Prevent concurrent executions
     if (isRunning) {
         console.log('[PatternAnalysisJob] Previous analysis still running, skipping...');
@@ -61,7 +64,9 @@ const job = cron.schedule('0 0 * * 0', async () => {
     } finally {
         isRunning = false;
     }
-}, {
+}
+
+const job = cron.schedule('0 0 * * 0', runAnalysisTask, {
     scheduled: false, // Start manually via job.start()
     timezone: "UTC",
     
@@ -85,9 +90,8 @@ async function runManualAnalysis() {
         return { success: false, message: 'Analysis already running' };
     }
     
-    // Trigger the job task manually
-    const task = job.options.func;
-    await task();
+    // Trigger the analysis task manually
+    await runAnalysisTask();
     
     return { success: true, message: 'Manual analysis completed' };
 }
@@ -97,10 +101,9 @@ async function runManualAnalysis() {
  */
 function getJobStatus() {
     return {
-        isScheduled: job.options.scheduled,
         isRunning,
         schedule: '0 0 * * 0', // Every Sunday at midnight UTC
-        timezone: job.options.timezone,
+        timezone: 'UTC',
         nextRun: 'Sundays at 00:00 UTC'
     };
 }
@@ -109,9 +112,11 @@ function getJobStatus() {
  * Start the cron job
  */
 function start() {
-    if (!job.options.scheduled) {
+    try {
         job.start();
         console.log('[PatternAnalysisJob] Cron job started - runs every Sunday at midnight UTC');
+    } catch (error) {
+        console.error('[PatternAnalysisJob] Failed to start cron job:', error.message);
     }
 }
 
@@ -119,9 +124,11 @@ function start() {
  * Stop the cron job
  */
 function stop() {
-    if (job.options.scheduled) {
+    try {
         job.stop();
         console.log('[PatternAnalysisJob] Cron job stopped');
+    } catch (error) {
+        console.error('[PatternAnalysisJob] Failed to stop cron job:', error.message);
     }
 }
 
