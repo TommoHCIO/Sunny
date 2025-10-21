@@ -804,6 +804,12 @@ async function execute(toolName, input, guild, author, executionId = null) {
             case 'get_learning_stats':
                 return await getLearningStats(guild, input);
 
+            case 'review_patterns':
+                return await reviewPatterns(guild, input, message);
+
+            case 'run_pattern_analysis':
+                return await runPatternAnalysis(guild, input);
+
             default:
                 console.error(`❌ Unknown tool: ${toolName}`);
                 return {
@@ -3709,6 +3715,201 @@ async function getLearningStats(guild, input) {
         return {
             success: false,
             error: `Failed to get learning stats: ${error.message}`
+        };
+    }
+}
+
+/**
+ * Review detected patterns - Phase 2
+ * Displays patterns with approve/reject buttons for human-in-the-loop validation
+ */
+async function reviewPatterns(guild, input, message) {
+    try {
+        const Pattern = require('../models/Pattern');
+        const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+        
+        const patternType = input.pattern_type || 'all';
+        const minConfidence = input.min_confidence || 'medium';
+        const guildId = guild.id;
+        
+        // Get pending patterns using model's static method
+        const patterns = await Pattern.getPendingReview(guildId, minConfidence, patternType);
+        
+        if (patterns.length === 0) {
+            return {
+                success: true,
+                message: `No patterns pending review (filter: ${patternType}, min confidence: ${minConfidence})`
+            };
+        }
+        
+        // Get the channel from message
+        const channel = message.channel;
+        
+        // Display each pattern with approve/reject buttons
+        for (const pattern of patterns) {
+            const row = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`approve_pattern_${pattern._id}`)
+                        .setLabel('✅ Approve')
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId(`reject_pattern_${pattern._id}`)
+                        .setLabel('❌ Reject')
+                        .setStyle(ButtonStyle.Danger)
+                );
+            
+            // Format pattern display
+            const display = `**Pattern Detected** [${pattern.confidence.toUpperCase()} confidence]
+` +
+                           `Type: ${pattern.patternType}
+` +
+                           `Samples: ${pattern.sampleCount} | p-value: ${pattern.statisticalSignificance?.toFixed(4) || 'N/A'}
+` +
+                           `\n${pattern.description}\n` +
+                           `\n**Suggested Action:** ${pattern.suggestedAdjustment}
+` +
+                           `**Estimated Impact:** ${pattern.estimatedImpact || 'Unknown'}`;
+            
+            await channel.send({
+                content: display,
+                components: [row]
+            });
+        }
+        
+        // Set up collector for button interactions
+        const collector = channel.createMessageComponentCollector({
+            filter: (i) => i.customId.startsWith('approve_pattern_') || i.customId.startsWith('reject_pattern_'),
+            time: 300000 // 5 minutes
+        });
+        
+        collector.on('collect', async (interaction) => {
+            try {
+                // CRITICAL: Must respond within 3 seconds (Discord.js requirement)
+                await interaction.deferReply({ ephemeral: true });
+                
+                const [action, , patternId] = interaction.customId.split('_');
+                const pattern = await Pattern.findById(patternId);
+                
+                if (!pattern) {
+                    await interaction.editReply({ 
+                        content: '❌ Pattern not found. It may have been deleted.' 
+                    });
+                    return;
+                }
+                
+                if (action === 'approve') {
+                    await pattern.approvePattern(interaction.user.id);
+                    await interaction.editReply({ 
+                        content: `✅ Pattern approved! Will be applied in Phase 3 (Self-Adjustment).\n\nPattern: ${pattern.description}` 
+                    });
+                } else {
+                    await Pattern.findByIdAndDelete(patternId);
+                    await interaction.editReply({ 
+                        content: `❌ Pattern rejected and deleted.\n\nPattern: ${pattern.description}` 
+                    });
+                }
+                
+                // Disable buttons after interaction to prevent duplicate clicks
+                await interaction.message.edit({ components: [] });
+                
+            } catch (error) {
+                console.error('[reviewPatterns] Button interaction error:', error);
+                try {
+                    await interaction.editReply({ 
+                        content: `❌ Error processing pattern: ${error.message}` 
+                    });
+                } catch (e) {
+                    // Ignore if reply fails
+                }
+            }
+        });
+        
+        collector.on('end', () => {
+            console.log('[reviewPatterns] Collector ended after 5 minutes');
+        });
+        
+        return {
+            success: true,
+            message: `Displaying ${patterns.length} pattern(s) for review. Use buttons to approve/reject. You have 5 minutes to respond.`
+        };
+        
+    } catch (error) {
+        console.error('[reviewPatterns] Error:', error);
+        return {
+            success: false,
+            error: `Failed to review patterns: ${error.message}`
+        };
+    }
+}
+
+/**
+ * Manually trigger pattern analysis - Phase 2
+ * Normally runs automatically via weekly cron job
+ */
+async function runPatternAnalysis(guild, input) {
+    try {
+        const Outcome = require('../models/Outcome');
+        const { runManualAnalysis } = require('../jobs/patternAnalysisJob');
+        
+        const guildId = guild.id;
+        
+        // Check minimum sample size
+        const cutoffDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 days
+        const outcomeCount = await Outcome.countDocuments({
+            guildId,
+            timestamp: { $gte: cutoffDate }
+        });
+        
+        if (outcomeCount < 100) {
+            return {
+                success: false,
+                error: `Insufficient data for pattern analysis. Need 100+ outcomes in last 7 days (currently: ${outcomeCount}).\n` +
+                       `Keep using Sunny to collect more data!`
+            };
+        }
+        
+        // Trigger manual analysis
+        const result = await runManualAnalysis();
+        
+        if (!result.success) {
+            return {
+                success: false,
+                error: result.message
+            };
+        }
+        
+        // Get newly created patterns
+        const Pattern = require('../models/Pattern');
+        const recentPatterns = await Pattern.find({
+            guildId,
+            timestamp: { $gte: new Date(Date.now() - 60000) } // Last minute
+        }).sort({ confidence: -1 });
+        
+        if (recentPatterns.length === 0) {
+            return {
+                success: true,
+                message: `Pattern analysis complete. Analyzed ${outcomeCount} outcomes from last 7 days.\n` +
+                        `No significant patterns detected (all below threshold).`
+            };
+        }
+        
+        const summary = recentPatterns.map(p => 
+            `  - [${p.confidence.toUpperCase()}] ${p.patternType}: ${p.description}`
+        ).join('\n');
+        
+        return {
+            success: true,
+            message: `Pattern analysis complete! Analyzed ${outcomeCount} outcomes.\n` +
+                    `\n**Patterns Detected (${recentPatterns.length}):**\n${summary}\n` +
+                    `\nUse 'review_patterns' tool to approve/reject these patterns.`
+        };
+        
+    } catch (error) {
+        console.error('[runPatternAnalysis] Error:', error);
+        return {
+            success: false,
+            error: `Failed to run pattern analysis: ${error.message}`
         };
     }
 }

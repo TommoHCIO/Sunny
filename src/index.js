@@ -166,6 +166,15 @@ client.once('ready', async () => {
         logger.error('⚠️  Failed to initialize scheduled messages:', error);
     }
     
+    // Initialize pattern analysis cron job (Phase 2 - AGI Learning System)
+    try {
+        const patternAnalysisJob = require('./jobs/patternAnalysisJob');
+        patternAnalysisJob.start();
+        logger.info('✅ Pattern analysis job initialized (runs Sundays at midnight UTC)');
+    } catch (error) {
+        logger.error('⚠️  Failed to initialize pattern analysis job:', error);
+    }
+    
     // Set bot status
     client.user.setPresence({
         activities: [{ name: 'The Nook 🍂', type: 3 }], // Type 3 = Watching
