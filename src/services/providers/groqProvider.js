@@ -90,13 +90,26 @@ function loadPersonality() {
 }
 
 /**
- * Get tool definitions for Groq
+ * Get tool definitions for Groq (converted to OpenAI format)
+ * @param {Guild} guild - Discord guild object for context
  */
-function getToolDefinitions() {
+function getToolDefinitions(guild) {
     // Import tool definitions
     try {
-        const discordTools = require('../../tools/discordTools');
-        return discordTools.tools || [];
+        const { getDiscordTools } = require('../../tools/discordTools');
+        const claudeTools = getDiscordTools(guild);
+
+        console.log(`[GroqProvider] Loaded ${claudeTools.length} tools`);
+
+        // Convert from Claude format (input_schema) to OpenAI/Groq format (parameters)
+        return claudeTools.map(tool => ({
+            type: "function",
+            function: {
+                name: tool.name,
+                description: tool.description,
+                parameters: tool.input_schema || { type: "object", properties: {} }
+            }
+        }));
     } catch (error) {
         console.warn('[GroqProvider] Could not load tool definitions:', error.message);
         return [];
@@ -181,8 +194,8 @@ async function runAgent(userMessage, contextPrompt, author, guild, channel, stat
     // Add user message
     messages.push({ role: 'user', content: userMessage });
 
-    // Get tools
-    const tools = getToolDefinitions();
+    // Get tools (pass guild for context)
+    const tools = getToolDefinitions(guild);
 
     // Rate limit
     await groqRateLimiter.removeTokens(1);
@@ -270,11 +283,11 @@ async function runAgent(userMessage, contextPrompt, author, guild, channel, stat
 
         // Handle rate limits
         if (error.status === 429) {
-            return "I'm getting a lot of requests right now! Give me a moment and try again. 🍂";
+            return "I'm getting a lot of requests right now! Give me a moment and try again.";
         }
 
         // Handle other errors
-        return "Something went wrong on my end. Let me try again! 🍂";
+        return "Something went wrong on my end. Let me try again!";
     }
 }
 
@@ -293,7 +306,7 @@ ${isOwner ? 'IMPORTANT: This user is the SERVER OWNER. You can execute owner-onl
 
 === RESPONSE GUIDELINES ===
 - Be helpful, friendly, and concise
-- Use the autumn theme (🍂) sparingly
+- Use the autumn theme sparingly
 - Execute tool calls when needed
 - Keep responses under 2000 characters for Discord`;
 
