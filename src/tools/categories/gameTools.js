@@ -199,9 +199,9 @@ function getGameTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    channelName: {
+                    channel: {
                         type: "string",
-                        description: "Channel to roll dice in"
+                        description: "Channel name to roll dice in"
                     },
                     sides: {
                         type: "number",
@@ -218,7 +218,7 @@ function getGameTools(guild) {
                         default: 1
                     }
                 },
-                required: ["channelName"]
+                required: ["channel"]
             }
         },
         {
@@ -227,12 +227,12 @@ function getGameTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    channelName: {
+                    channel: {
                         type: "string",
-                        description: "Channel to flip coin in"
+                        description: "Channel name to flip coin in"
                     }
                 },
-                required: ["channelName"]
+                required: ["channel"]
             }
         },
 
@@ -243,16 +243,16 @@ function getGameTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    channelName: {
+                    channel: {
                         type: "string",
-                        description: "Channel to ask in"
+                        description: "Channel name to ask in"
                     },
                     question: {
                         type: "string",
                         description: "Question to ask the magic 8-ball"
                     }
                 },
-                required: ["channelName", "question"]
+                required: ["channel", "question"]
             }
         },
         {
@@ -261,9 +261,9 @@ function getGameTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    channelName: {
+                    channel: {
                         type: "string",
-                        description: "Channel to share fact in"
+                        description: "Channel name to share fact in"
                     },
                     category: {
                         type: "string",
@@ -271,7 +271,7 @@ function getGameTools(guild) {
                         enum: ["general", "science", "history", "space", "animals", "food"]
                     }
                 },
-                required: ["channelName"]
+                required: ["channel"]
             }
         },
 
