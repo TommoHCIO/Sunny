@@ -82,6 +82,28 @@ function hashArguments(args) {
  */
 async function execute(toolName, input, guild, author, executionId = null) {
     const startTime = Date.now();
+
+    // Normalize parameter names (AI models may use different names)
+    // This handles cases where Llama sends 'channel' instead of 'channelName', etc.
+    if (input) {
+        if (input.channel && !input.channelName) {
+            input.channelName = input.channel;
+            delete input.channel;
+        }
+        if (input.role && !input.roleName) {
+            input.roleName = input.role;
+            delete input.role;
+        }
+        if (input.user && !input.userId && !input.username) {
+            input.username = input.user;
+            delete input.user;
+        }
+        if (input.member && !input.memberId && !input.memberName) {
+            input.memberName = input.member;
+            delete input.member;
+        }
+    }
+
     // Initialize action handler if needed
     if (!actionHandler) {
         // Create a minimal client object for ActionHandler
