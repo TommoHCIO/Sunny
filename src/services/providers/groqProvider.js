@@ -15,12 +15,13 @@ const OpenAI = require('openai');
 const fs = require('fs');
 const path = require('path');
 const EventEmitter = require('events');
-const { RateLimiter } = require('limiter');
+const { RateLimiter } = require('../../utils/rateLimiter');
 
 // Rate limiter: 30 requests per minute to stay well under limits
 const groqRateLimiter = new RateLimiter({
     tokensPerInterval: 30,
-    interval: 'minute'
+    interval: 60000, // 1 minute in ms
+    name: 'Groq API'
 });
 
 // Load personality from config
