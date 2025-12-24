@@ -102,6 +102,11 @@ async function execute(toolName, input, guild, author, executionId = null) {
             input.memberName = input.member;
             delete input.member;
         }
+        // Handle user -> userId for member tools (also search by username)
+        if (input.user && !input.userId) {
+            input.userId = input.user;
+            delete input.user;
+        }
     }
 
     // Initialize action handler if needed

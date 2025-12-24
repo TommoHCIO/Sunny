@@ -82,12 +82,12 @@ function getMemberTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    userId: {
+                    user: {
                         type: "string",
-                        description: "Discord user ID of the member"
+                        description: "Username, display name, or user ID of the member"
                     }
                 },
-                required: ["userId"]
+                required: ["user"]
             }
         },
         {

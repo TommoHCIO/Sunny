@@ -13,7 +13,20 @@ async function getMemberInfo(guild, userId) {
     }
 
     try {
-        const member = await guild.members.fetch(userId);
+        let member;
+        
+        // Check if userId is a valid Discord snowflake (numeric ID)
+        if (/^\d{17,20}$/.test(userId)) {
+            member = await guild.members.fetch(userId);
+        } else {
+            // Search by username/display name
+            const members = await guild.members.fetch();
+            member = members.find(m => 
+                m.user.username.toLowerCase() === userId.toLowerCase() ||
+                m.displayName.toLowerCase() === userId.toLowerCase() ||
+                m.user.username.toLowerCase().includes(userId.toLowerCase())
+            );
+        }
         if (!member) {
             return { success: false, error: `Member with ID ${userId} not found` };
         }

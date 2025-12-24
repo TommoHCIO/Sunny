@@ -22,16 +22,16 @@ function getMessageTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    channelName: {
+                    channel: {
                         type: "string",
-                        description: "Name of the channel to send message to"
+                        description: "Name or ID of the channel to send message to"
                     },
                     content: {
                         type: "string",
                         description: "Message content to send"
                     }
                 },
-                required: ["channelName", "content"]
+                required: ["channel", "content"]
             }
         },
         {
@@ -40,7 +40,7 @@ function getMessageTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    channelName: {
+                    channel: {
                         type: "string",
                         description: "Channel name OR channel ID. Both formats work! Examples: 'welcome' or '1425938574901121105'"
                     },
@@ -69,7 +69,7 @@ function getMessageTools(guild) {
                         description: "Small thumbnail image URL"
                     }
                 },
-                required: ["channelName", "description"]
+                required: ["channel", "description"]
             }
         },
         {
@@ -82,7 +82,7 @@ function getMessageTools(guild) {
                         type: "string",
                         description: "ID of the message to edit"
                     },
-                    channelName: {
+                    channel: {
                         type: "string",
                         description: "Channel containing the message"
                     },
@@ -91,7 +91,7 @@ function getMessageTools(guild) {
                         description: "New message content"
                     }
                 },
-                required: ["messageId", "channelName", "newContent"]
+                required: ["messageId", "channel", "newContent"]
             }
         },
         {
@@ -104,12 +104,12 @@ function getMessageTools(guild) {
                         type: "string",
                         description: "ID of the message to delete"
                     },
-                    channelName: {
+                    channel: {
                         type: "string",
                         description: "Channel containing the message"
                     }
                 },
-                required: ["messageId", "channelName"]
+                required: ["messageId", "channel"]
             }
         },
         {
@@ -122,12 +122,12 @@ function getMessageTools(guild) {
                         type: "string",
                         description: "ID of the message to pin"
                     },
-                    channelName: {
+                    channel: {
                         type: "string",
                         description: "Channel containing the message"
                     }
                 },
-                required: ["messageId", "channelName"]
+                required: ["messageId", "channel"]
             }
         },
         {
@@ -140,12 +140,12 @@ function getMessageTools(guild) {
                         type: "string",
                         description: "ID of the message to unpin"
                     },
-                    channelName: {
+                    channel: {
                         type: "string",
                         description: "Channel containing the message"
                     }
                 },
-                required: ["messageId", "channelName"]
+                required: ["messageId", "channel"]
             }
         },
         {
@@ -154,7 +154,7 @@ function getMessageTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    channelName: {
+                    channel: {
                         type: "string",
                         description: "Channel to purge messages from"
                     },
@@ -163,7 +163,7 @@ function getMessageTools(guild) {
                         description: "Number of messages to delete (1-100)"
                     }
                 },
-                required: ["channelName", "amount"]
+                required: ["channel", "amount"]
             }
         },
 
@@ -178,7 +178,7 @@ function getMessageTools(guild) {
                         type: "string",
                         description: "Message ID to add reaction to. Get this from send_embed or send_message result!"
                     },
-                    channelName: {
+                    channel: {
                         type: "string",
                         description: "Channel name OR ID containing the message. Examples: 'welcome' or '1425938574901121105'"
                     },
@@ -187,7 +187,7 @@ function getMessageTools(guild) {
                         description: "Emoji to react with (e.g., '✅', '👍', '🍂'). Use exact Unicode or custom emoji name."
                     }
                 },
-                required: ["messageId", "channelName", "emoji"]
+                required: ["messageId", "channel", "emoji"]
             }
         },
         {
@@ -200,7 +200,7 @@ function getMessageTools(guild) {
                         type: "string",
                         description: "ID of the message"
                     },
-                    channelName: {
+                    channel: {
                         type: "string",
                         description: "Channel containing the message"
                     },
@@ -213,7 +213,7 @@ function getMessageTools(guild) {
                         description: "Optional: User ID to remove reaction from (defaults to all users)"
                     }
                 },
-                required: ["messageId", "channelName", "emoji"]
+                required: ["messageId", "channel", "emoji"]
             }
         },
         {
@@ -226,12 +226,12 @@ function getMessageTools(guild) {
                         type: "string",
                         description: "ID of the message"
                     },
-                    channelName: {
+                    channel: {
                         type: "string",
                         description: "Channel containing the message"
                     }
                 },
-                required: ["messageId", "channelName"]
+                required: ["messageId", "channel"]
             }
         },
         {
@@ -244,7 +244,7 @@ function getMessageTools(guild) {
                         type: "string",
                         description: "Message ID returned from send_embed or send_message tool. MUST use the exact message_id from the tool result, not a random ID!"
                     },
-                    channelName: {
+                    channel: {
                         type: "string",
                         description: "Channel name OR channel ID containing the message. Examples: 'welcome' or '1425938574901121105'"
                     },
@@ -293,7 +293,7 @@ function getMessageTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    channelName: {
+                    channel: {
                         type: "string",
                         description: "Channel name or ID to fetch messages from"
                     },
@@ -302,7 +302,7 @@ function getMessageTools(guild) {
                         description: "Number of messages to fetch (1-100, default: 50)"
                     }
                 },
-                required: ["channelName"]
+                required: ["channel"]
             }
         },
         {
@@ -311,7 +311,7 @@ function getMessageTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    channelName: {
+                    channel: {
                         type: "string",
                         description: "Channel name or ID where to send the message"
                     },
@@ -378,7 +378,7 @@ function getMessageTools(guild) {
                         }
                     }
                 },
-                required: ["channelName", "buttons"]
+                required: ["channel", "buttons"]
             }
         }
     ];
