@@ -1,10 +1,10 @@
 // src/tools/categories/memberTools.js
 /**
  * Discord Member Management Tools
- * 
+ *
  * Tools for member management, moderation actions, and member information retrieval.
  * Includes timeouts, kicks, bans, nickname management, and detailed member lookups.
- * 
+ *
  * @module memberTools
  */
 
@@ -22,9 +22,9 @@ function getMemberTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    userId: {
+                    user: {
                         type: "string",
-                        description: "Discord user ID of the member to timeout"
+                        description: "Username, display name, or user ID of the member to timeout"
                     },
                     duration: {
                         type: "number",
@@ -35,7 +35,7 @@ function getMemberTools(guild) {
                         description: "Reason for the timeout"
                     }
                 },
-                required: ["userId", "duration", "reason"]
+                required: ["user", "duration", "reason"]
             }
         },
         {
@@ -44,16 +44,16 @@ function getMemberTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    userId: {
+                    user: {
                         type: "string",
-                        description: "Discord user ID of the member to kick"
+                        description: "Username, display name, or user ID of the member to kick"
                     },
                     reason: {
                         type: "string",
                         description: "Reason for kicking"
                     }
                 },
-                required: ["userId", "reason"]
+                required: ["user", "reason"]
             }
         },
         {
@@ -62,16 +62,16 @@ function getMemberTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    userId: {
+                    user: {
                         type: "string",
-                        description: "Discord user ID of the member"
+                        description: "Username, display name, or user ID of the member"
                     },
                     nickname: {
                         type: "string",
                         description: "New nickname (empty string to remove nickname)"
                     }
                 },
-                required: ["userId", "nickname"]
+                required: ["user", "nickname"]
             }
         },
 
@@ -96,12 +96,12 @@ function getMemberTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    userId: {
+                    user: {
                         type: "string",
-                        description: "Discord user ID of the member"
+                        description: "Username, display name, or user ID of the member"
                     }
                 },
-                required: ["userId"]
+                required: ["user"]
             }
         },
         {
@@ -110,12 +110,12 @@ function getMemberTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    userId: {
+                    user: {
                         type: "string",
-                        description: "Discord user ID of the member"
+                        description: "Username, display name, or user ID of the member"
                     }
                 },
-                required: ["userId"]
+                required: ["user"]
             }
         },
         {
@@ -124,12 +124,12 @@ function getMemberTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    roleId: {
+                    role: {
                         type: "string",
-                        description: "Role ID to search for"
+                        description: "Role name or role ID to search for"
                     }
                 },
-                required: ["roleId"]
+                required: ["role"]
             }
         },
         {
@@ -167,16 +167,16 @@ function getMemberTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    userId: {
+                    user: {
                         type: "string",
-                        description: "Discord user ID of the member"
+                        description: "Username, display name, or user ID of the member"
                     },
                     reason: {
                         type: "string",
                         description: "Reason for removing timeout (default: 'Timeout removed by Sunny')"
                     }
                 },
-                required: ["userId"]
+                required: ["user"]
             }
         },
         {
@@ -194,9 +194,9 @@ function getMemberTools(guild) {
                         enum: ["timeout", "kick", "ban", "unban", "role_update", "channel_create", "channel_delete", "message_delete", "member_prune"],
                         description: "Filter by specific action type"
                     },
-                    userId: {
+                    user: {
                         type: "string",
-                        description: "Filter by executor user ID"
+                        description: "Filter by executor username or user ID"
                     }
                 },
                 required: []
@@ -208,9 +208,9 @@ function getMemberTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    userId: {
+                    user: {
                         type: "string",
-                        description: "Discord user ID of the member to ban"
+                        description: "Username, display name, or user ID of the member to ban"
                     },
                     reason: {
                         type: "string",
@@ -221,7 +221,7 @@ function getMemberTools(guild) {
                         description: "Delete messages from the last N days (0-7, default: 0)"
                     }
                 },
-                required: ["userId"]
+                required: ["user"]
             }
         },
         {
@@ -230,16 +230,16 @@ function getMemberTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    userId: {
+                    user: {
                         type: "string",
-                        description: "Discord user ID of the banned member"
+                        description: "Username or user ID of the banned member"
                     },
                     reason: {
                         type: "string",
                         description: "Reason for unbanning (default: 'Unbanned by Sunny')"
                     }
                 },
-                required: ["userId"]
+                required: ["user"]
             }
         },
         {
@@ -259,9 +259,9 @@ function getMemberTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    userId: {
+                    user: {
                         type: "string",
-                        description: "Discord user ID of the member"
+                        description: "Username, display name, or user ID of the member"
                     },
                     deaf: {
                         type: "boolean",
@@ -272,7 +272,7 @@ function getMemberTools(guild) {
                         description: "Reason for action (default: 'Member deafened by Sunny')"
                     }
                 },
-                required: ["userId", "deaf"]
+                required: ["user", "deaf"]
             }
         },
         {
@@ -281,9 +281,9 @@ function getMemberTools(guild) {
             input_schema: {
                 type: "object",
                 properties: {
-                    userId: {
+                    user: {
                         type: "string",
-                        description: "Discord user ID of the member"
+                        description: "Username, display name, or user ID of the member"
                     },
                     mute: {
                         type: "boolean",
@@ -294,7 +294,7 @@ function getMemberTools(guild) {
                         description: "Reason for action (default: 'Member muted by Sunny')"
                     }
                 },
-                required: ["userId", "mute"]
+                required: ["user", "mute"]
             }
         }
     ];

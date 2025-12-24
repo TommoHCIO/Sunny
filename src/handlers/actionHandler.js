@@ -731,12 +731,28 @@ class ActionHandler {
     async timeoutMember(guild, action) {
         const { userId, duration, reason } = action;
 
-        const member = await guild.members.fetch(userId);
+        // Find member by ID or username
+        let member;
+        try {
+            if (/^\d{17,20}$/.test(userId)) {
+                member = await guild.members.fetch(userId);
+            } else {
+                // Search by username/display name
+                const members = await guild.members.fetch();
+                member = members.find(m => 
+                    m.user.username.toLowerCase() === userId.toLowerCase() ||
+                    m.displayName.toLowerCase() === userId.toLowerCase() ||
+                    m.user.username.toLowerCase().includes(userId.toLowerCase())
+                );
+            }
+        } catch (error) {
+            this.log('❌', `Failed to find member: ${error.message}`);
+        }
 
         if (!member) {
             return {
                 success: false,
-                error: `Member with ID "${userId}" not found`
+                error: `Member "${userId}" not found`
             };
         }
 
@@ -746,14 +762,29 @@ class ActionHandler {
 
         return {
             success: true,
-            message: `Timed out ${member.user.tag} for ${duration} minutes`
+            message: `Timed out ${member.user.tag} for ${duration} minutes`,
+            member: { id: member.id, username: member.user.username, displayName: member.displayName }
         };
     }
 
     async removeTimeout(guild, action) {
         const { userId } = action;
 
-        const member = await guild.members.fetch(userId);
+        // Find member by ID or username
+        let member;
+        try {
+            if (/^\d{17,20}$/.test(userId)) {
+                member = await guild.members.fetch(userId);
+            } else {
+                const members = await guild.members.fetch();
+                member = members.find(m => 
+                    m.user.username.toLowerCase() === userId.toLowerCase() ||
+                    m.displayName.toLowerCase() === userId.toLowerCase()
+                );
+            }
+        } catch (error) {
+            this.log('❌', `Failed to find member: ${error.message}`);
+        }
 
         if (!member) {
             return {
@@ -774,12 +805,26 @@ class ActionHandler {
     async setNickname(guild, action) {
         const { userId, nickname } = action;
 
-        const member = await guild.members.fetch(userId);
+        // Find member by ID or username
+        let member;
+        try {
+            if (/^\d{17,20}$/.test(userId)) {
+                member = await guild.members.fetch(userId);
+            } else {
+                const members = await guild.members.fetch();
+                member = members.find(m => 
+                    m.user.username.toLowerCase() === userId.toLowerCase() ||
+                    m.displayName.toLowerCase() === userId.toLowerCase()
+                );
+            }
+        } catch (error) {
+            this.log('❌', `Failed to find member: ${error.message}`);
+        }
 
         if (!member) {
             return {
                 success: false,
-                error: `Member with ID "${userId}" not found`
+                error: `Member "${userId}" not found`
             };
         }
 
@@ -788,7 +833,8 @@ class ActionHandler {
 
         return {
             success: true,
-            message: `Set nickname for ${member.user.tag}: ${nickname}`
+            message: `Set nickname for ${member.user.tag}: ${nickname}`,
+            member: { id: member.id, username: member.user.username, displayName: member.displayName }
         };
     }
 

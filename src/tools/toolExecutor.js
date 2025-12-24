@@ -23,6 +23,9 @@ const ServerSettings = require('../models/ServerSettings');
 const ToolExecution = require('../models/ToolExecution');
 const crypto = require('crypto');
 
+// Debug service for comprehensive logging
+const debug = require('../services/debugService');
+
 // Initialize action handler (singleton pattern)
 let actionHandler = null;
 
@@ -82,32 +85,42 @@ function hashArguments(args) {
  */
 async function execute(toolName, input, guild, author, executionId = null) {
     const startTime = Date.now();
+    
+    // Log tool call received
+    debug.logToolCallRequested(executionId, toolName, JSON.stringify(input));
+    debug.logToolArgsReceived(executionId, toolName, input);
+
+    // Store original args for logging
+    const originalArgs = input ? { ...input } : {};
 
     // Normalize parameter names (AI models may use different names)
     // This handles cases where Llama sends 'channel' instead of 'channelName', etc.
     if (input) {
+        // Channel normalization
         if (input.channel && !input.channelName) {
             input.channelName = input.channel;
             delete input.channel;
         }
-        if (input.role && !input.roleName) {
+        // Role normalization
+        if (input.role && !input.roleName && !input.roleId) {
             input.roleName = input.role;
             delete input.role;
         }
-        if (input.user && !input.userId && !input.username) {
-            input.username = input.user;
-            delete input.user;
-        }
-        if (input.member && !input.memberId && !input.memberName) {
-            input.memberName = input.member;
-            delete input.member;
-        }
-        // Handle user -> userId for member tools (also search by username)
+        // User normalization - map 'user' to 'userId' for member tools
+        // Also keep original value for username-based lookups
         if (input.user && !input.userId) {
             input.userId = input.user;
             delete input.user;
         }
+        // Member normalization
+        if (input.member && !input.memberId && !input.memberName) {
+            input.memberName = input.member;
+            delete input.member;
+        }
     }
+    
+    // Log args normalization
+    debug.logToolArgsNormalized(executionId, toolName, originalArgs, input);
 
     // Initialize action handler if needed
     if (!actionHandler) {

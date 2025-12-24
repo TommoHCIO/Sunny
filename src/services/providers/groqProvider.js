@@ -16,6 +16,7 @@ const fs = require('fs');
 const path = require('path');
 const EventEmitter = require('events');
 const { RateLimiter } = require('../../utils/rateLimiter');
+const debug = require('../debugService');
 
 // Rate limiter: 30 requests per minute to stay well under limits
 const groqRateLimiter = new RateLimiter({
@@ -186,12 +187,20 @@ function selectModel(message) {
 async function runAgent(userMessage, contextPrompt, author, guild, channel, statusEmitter = null, executionId = null) {
     const startTime = Date.now();
     const isOwner = author.id === process.env.DISCORD_OWNER_ID;
+    
+    // Create execution context for debug tracking
+    if (executionId) {
+        debug.createExecutionContext(executionId, { provider: 'groq', user: author.username, guild: guild.name });
+    }
+    
+    debug.logRequestStarted(executionId);
 
     // Select model based on message complexity
     const model = selectModel(userMessage);
     const modelInfo = GROQ_MODELS[model];
 
     console.log(`[GroqProvider] Using model: ${modelInfo.name}`);
+    debug.logModelSelected(executionId, modelInfo.name, 'Message complexity analysis');
 
     // Emit status update
     if (statusEmitter) {
@@ -204,6 +213,7 @@ async function runAgent(userMessage, contextPrompt, author, guild, channel, stat
 
     // Build system prompt
     const systemPrompt = buildSystemPrompt(isOwner, author, guild);
+    debug.logPromptBuilt(executionId, userMessage.length, systemPrompt.length);
 
     // Build messages array
     const messages = [
@@ -213,6 +223,7 @@ async function runAgent(userMessage, contextPrompt, author, guild, channel, stat
     // Add context if available
     if (contextPrompt) {
         messages.push({ role: 'system', content: `Recent conversation context:\n${contextPrompt}` });
+        debug.logContextLoaded(executionId, 1, Math.ceil(contextPrompt.length / 4));
     }
 
     // Add user message
@@ -220,6 +231,7 @@ async function runAgent(userMessage, contextPrompt, author, guild, channel, stat
 
     // Get tools (pass guild for context)
     const tools = getToolDefinitions(guild);
+    debug.logToolsLoaded(executionId, tools.length, tools.map(t => t.function?.name || t.name));
 
     // Rate limit
     await groqRateLimiter.removeTokens(1);
@@ -231,10 +243,14 @@ async function runAgent(userMessage, contextPrompt, author, guild, channel, stat
     try {
         while (iteration < maxIterations) {
             iteration++;
+            debug.logToolChainProgress(executionId, iteration, maxIterations, 'API call');
 
             if (statusEmitter) {
                 statusEmitter.emit('api_call_start', { iteration, maxIterations });
             }
+
+            const apiStartTime = Date.now();
+            debug.logApiCallStarted(executionId, 'Groq', '/chat/completions');
 
             const response = await groq.chat.completions.create({
                 model,
@@ -245,27 +261,45 @@ async function runAgent(userMessage, contextPrompt, author, guild, channel, stat
                 temperature: parseFloat(process.env.GROQ_TEMPERATURE) || 0.7
             });
 
+            const apiDuration = Date.now() - apiStartTime;
+            debug.logApiCallCompleted(executionId, 'Groq', apiDuration, {
+                promptTokens: response.usage?.prompt_tokens,
+                completionTokens: response.usage?.completion_tokens
+            });
+
             const choice = response.choices[0];
             const message = choice.message;
 
             // Check if we need to call tools
             if (choice.finish_reason === 'tool_calls' && message.tool_calls) {
                 messages.push(message);
+                debug.logToolChainStarted(executionId, message.tool_calls.length);
 
                 // Execute each tool call
+                let toolIndex = 0;
                 for (const toolCall of message.tool_calls) {
+                    toolIndex++;
                     const toolName = toolCall.function.name;
                     const toolArgs = JSON.parse(toolCall.function.arguments || '{}');
+
+                    debug.logToolCallRequested(executionId, toolName, JSON.stringify(toolArgs));
+                    debug.logToolChainProgress(executionId, toolIndex, message.tool_calls.length, toolName);
 
                     if (statusEmitter) {
                         statusEmitter.emit('tool_execution', { toolName, args: toolArgs, iteration });
                     }
 
                     console.log(`[GroqProvider] Executing tool: ${toolName}`);
+                    debug.logToolExecutionStarted(executionId, toolName, toolArgs);
 
                     // Execute the tool
+                    const toolStartTime = Date.now();
                     const toolExecutor = require('../../tools/toolExecutor');
                     const toolResult = await toolExecutor.execute(toolName, toolArgs, guild, author, executionId);
+                    const toolDuration = Date.now() - toolStartTime;
+
+                    debug.logToolExecutionCompleted(executionId, toolName, toolDuration, toolResult);
+                    debug.logToolResultSent(executionId, toolName, JSON.stringify(toolResult).length);
 
                     // Add tool result to messages
                     messages.push({
@@ -280,6 +314,7 @@ async function runAgent(userMessage, contextPrompt, author, guild, channel, stat
 
             // We have the final response
             finalResponse = message.content || '';
+            debug.logResponseGenerated(executionId, finalResponse.length, false, false);
             break;
         }
 
@@ -295,11 +330,14 @@ async function runAgent(userMessage, contextPrompt, author, guild, channel, stat
         }
 
         console.log(`[GroqProvider] Completed in ${duration}ms with ${iteration} iteration(s)`);
+        debug.logRequestCompleted(executionId, duration, true);
+        debug.logDebugSummary(executionId);
 
         return finalResponse;
 
     } catch (error) {
         console.error('[GroqProvider] Error:', error.message);
+        debug.logApiCallFailed(executionId, 'Groq', error.message, error.status);
 
         if (statusEmitter) {
             statusEmitter.emit('error', { error: error.message });
