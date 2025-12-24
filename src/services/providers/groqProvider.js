@@ -79,6 +79,66 @@ const GROQ_MODELS = {
 // Default model
 const DEFAULT_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 
+// Tool name mappings for common Llama hallucinations
+// Maps incorrect tool names to correct ones
+const TOOL_NAME_ALIASES = {
+    // Timeout variations
+    'set_timeout': 'timeout_member',
+    'mute_member': 'timeout_member',
+    'mute_user': 'timeout_member',
+    'timeout_user': 'timeout_member',
+    'timeout': 'timeout_member',
+
+    // Role variations
+    'get_roles': 'list_roles',
+    'show_roles': 'list_roles',
+    'list_all_roles': 'list_roles',
+    'add_role_to_member': 'add_role',
+    'remove_role_from_member': 'remove_role',
+    'give_role': 'add_role',
+    'take_role': 'remove_role',
+
+    // Channel variations
+    'get_channels': 'list_channels',
+    'show_channels': 'list_channels',
+    'list_all_channels': 'list_channels',
+    'make_channel': 'create_channel',
+    'new_channel': 'create_channel',
+
+    // Member variations
+    'get_user_info': 'get_member_info',
+    'user_info': 'get_member_info',
+    'member_info': 'get_member_info',
+    'get_user': 'get_member_info',
+    'kick_user': 'kick_member',
+    'ban_user': 'ban_member',
+
+    // Message variations
+    'send': 'send_message',
+    'message': 'send_message',
+    'post_message': 'send_message',
+    'delete': 'delete_message',
+    'remove_message': 'delete_message',
+
+    // Server info variations
+    'server_info': 'get_server_info',
+    'guild_info': 'get_server_info',
+    'get_server': 'get_server_info',
+    'get_guild': 'get_server_info'
+};
+
+/**
+ * Map a potentially hallucinated tool name to the correct one
+ */
+function mapToolName(toolName) {
+    const mapped = TOOL_NAME_ALIASES[toolName];
+    if (mapped) {
+        console.log(`[GroqProvider] Mapped tool name: ${toolName} -> ${mapped}`);
+        debug.log(`Tool name mapped: ${toolName} -> ${mapped}`);
+    }
+    return mapped || toolName;
+}
+
 /**
  * Load personality with owner ID replacement
  */
@@ -109,7 +169,7 @@ function getToolDefinitions(guild) {
             'list_', 'get_', 'create_', 'delete_', 'rename_', 'update_',  // Core CRUD
             'send_', 'edit_', 'pin_', 'unpin_',  // Messages
             'add_', 'remove_', 'set_', 'clear_',  // Modifications
-            'kick_', 'ban_', 'unban_', 'mute_', 'unmute_', 'warn_',  // Moderation
+            'kick_', 'ban_', 'unban_', 'timeout_',  // Moderation
             'roll_', 'flip_', 'magic_', 'start_', 'end_',  // Games
         ];
 
@@ -139,6 +199,13 @@ function getToolDefinitions(guild) {
         console.warn('[GroqProvider] Could not load tool definitions:', error.message);
         return [];
     }
+}
+
+/**
+ * Get list of available tool names for validation
+ */
+function getAvailableToolNames(tools) {
+    return new Set(tools.map(t => t.function?.name || t.name));
 }
 
 /**
@@ -211,8 +278,13 @@ async function runAgent(userMessage, contextPrompt, author, guild, channel, stat
         });
     }
 
-    // Build system prompt
-    const systemPrompt = buildSystemPrompt(isOwner, author, guild);
+    // Get tools first so we can include key tool names in prompt
+    const tools = getToolDefinitions(guild);
+    const availableToolNames = getAvailableToolNames(tools);
+    debug.logToolsLoaded(executionId, tools.length, Array.from(availableToolNames));
+
+    // Build system prompt with tool guidance
+    const systemPrompt = buildSystemPrompt(isOwner, author, guild, tools);
     debug.logPromptBuilt(executionId, userMessage.length, systemPrompt.length);
 
     // Build messages array
@@ -228,10 +300,6 @@ async function runAgent(userMessage, contextPrompt, author, guild, channel, stat
 
     // Add user message
     messages.push({ role: 'user', content: userMessage });
-
-    // Get tools (pass guild for context)
-    const tools = getToolDefinitions(guild);
-    debug.logToolsLoaded(executionId, tools.length, tools.map(t => t.function?.name || t.name));
 
     // Rate limit
     await groqRateLimiter.removeTokens(1);
@@ -279,8 +347,29 @@ async function runAgent(userMessage, contextPrompt, author, guild, channel, stat
                 let toolIndex = 0;
                 for (const toolCall of message.tool_calls) {
                     toolIndex++;
-                    const toolName = toolCall.function.name;
+                    let toolName = toolCall.function.name;
                     const toolArgs = JSON.parse(toolCall.function.arguments || '{}');
+
+                    // Map hallucinated tool names to correct ones
+                    const originalToolName = toolName;
+                    toolName = mapToolName(toolName);
+                    
+                    // Check if tool exists (after mapping)
+                    if (!availableToolNames.has(toolName)) {
+                        console.warn(`[GroqProvider] Unknown tool: ${originalToolName} (mapped: ${toolName})`);
+                        debug.logToolNotFound(executionId, toolName, Array.from(availableToolNames).slice(0, 10));
+                        
+                        // Return error result for this tool
+                        messages.push({
+                            role: 'tool',
+                            tool_call_id: toolCall.id,
+                            content: JSON.stringify({
+                                success: false,
+                                error: `Tool '${originalToolName}' not found. Available tools include: timeout_member, list_roles, get_member_info, send_message, etc.`
+                            })
+                        });
+                        continue;
+                    }
 
                     debug.logToolCallRequested(executionId, toolName, JSON.stringify(toolArgs));
                     debug.logToolChainProgress(executionId, toolIndex, message.tool_calls.length, toolName);
@@ -348,28 +437,67 @@ async function runAgent(userMessage, contextPrompt, author, guild, channel, stat
             return "I'm getting a lot of requests right now! Give me a moment and try again.";
         }
 
+        // Handle tool validation errors (400)
+        if (error.status === 400 && error.message?.includes('tool')) {
+            console.warn('[GroqProvider] Tool validation error, retrying without tools');
+            debug.log('Tool validation failed, will respond without tool use');
+            
+            // Try again without tools
+            try {
+                const retryResponse = await groq.chat.completions.create({
+                    model,
+                    messages: messages.slice(0, 2), // Just system + user message
+                    max_tokens: parseInt(process.env.GROQ_MAX_TOKENS) || 2000,
+                    temperature: parseFloat(process.env.GROQ_TEMPERATURE) || 0.7
+                });
+                
+                return retryResponse.choices[0]?.message?.content || 
+                    "I couldn't complete that action, but I'm here to help! What would you like me to do?";
+            } catch (retryError) {
+                console.error('[GroqProvider] Retry also failed:', retryError.message);
+            }
+        }
+
         // Handle other errors
         return "Something went wrong on my end. Let me try again!";
     }
 }
 
 /**
- * Build the system prompt
+ * Build the system prompt with tool guidance
  */
-function buildSystemPrompt(isOwner, author, guild) {
+function buildSystemPrompt(isOwner, author, guild, tools = []) {
     const loadedPersonality = loadPersonality();
 
     let prompt = loadedPersonality;
+
+    // Add key tool names to help the model
+    const keyTools = [
+        'timeout_member', 'kick_member', 'ban_member',
+        'list_roles', 'add_role', 'remove_role',
+        'list_channels', 'create_channel', 'delete_channel',
+        'get_member_info', 'get_server_info',
+        'send_message', 'send_embed',
+        'roll_dice', 'flip_coin', 'magic_8ball'
+    ];
 
     prompt += `\n\n=== CURRENT CONTEXT ===
 Server: ${guild.name}
 User: ${author.username} (${author.displayName})
 ${isOwner ? 'IMPORTANT: This user is the SERVER OWNER. You can execute owner-only tools when they request them.\n' : ''}
 
+=== IMPORTANT: TOOL NAMES ===
+You MUST use the EXACT tool names provided. Common tools:
+- timeout_member (NOT set_timeout, mute_member)
+- list_roles (NOT get_roles, show_roles)
+- get_member_info (NOT user_info, get_user)
+- send_message (NOT send, message)
+- get_server_info (NOT server_info)
+
 === RESPONSE GUIDELINES ===
 - Be helpful, friendly, and concise
 - Use the autumn theme sparingly
-- Execute tool calls when needed
+- Execute tool calls when needed using EXACT tool names
 - Keep responses under 2000 characters for Discord`;
 
     return prompt;
@@ -394,5 +522,7 @@ module.exports = {
     loadPersonality,
     getModels,
     isConfigured,
-    DEFAULT_MODEL
+    DEFAULT_MODEL,
+    mapToolName,
+    TOOL_NAME_ALIASES
 };
