@@ -91,6 +91,7 @@ function loadPersonality() {
 
 /**
  * Get tool definitions for Groq (converted to OpenAI format)
+ * Groq has a limit of 128 tools, so we prioritize the most essential ones
  * @param {Guild} guild - Discord guild object for context
  */
 function getToolDefinitions(guild) {
@@ -99,10 +100,33 @@ function getToolDefinitions(guild) {
         const { getDiscordTools } = require('../../tools/discordTools');
         const claudeTools = getDiscordTools(guild);
 
-        console.log(`[GroqProvider] Loaded ${claudeTools.length} tools`);
+        console.log(`[GroqProvider] Loaded ${claudeTools.length} total tools`);
+
+        // Groq limit is 128 tools - prioritize essential tools
+        // Priority order: inspection, channels, roles, members, messages, games, then others
+        const priorityPrefixes = [
+            'list_', 'get_', 'create_', 'delete_', 'rename_', 'update_',  // Core CRUD
+            'send_', 'edit_', 'pin_', 'unpin_',  // Messages
+            'add_', 'remove_', 'set_', 'clear_',  // Modifications
+            'kick_', 'ban_', 'unban_', 'mute_', 'unmute_', 'warn_',  // Moderation
+            'roll_', 'flip_', 'magic_', 'start_', 'end_',  // Games
+        ];
+
+        // Sort tools by priority (essential ones first)
+        const sortedTools = claudeTools.sort((a, b) => {
+            const aHasPriority = priorityPrefixes.some(p => a.name.startsWith(p));
+            const bHasPriority = priorityPrefixes.some(p => b.name.startsWith(p));
+            if (aHasPriority && !bHasPriority) return -1;
+            if (!aHasPriority && bHasPriority) return 1;
+            return 0;
+        });
+
+        // Limit to 128 tools (Groq API limit)
+        const limitedTools = sortedTools.slice(0, 128);
+        console.log(`[GroqProvider] Using ${limitedTools.length} tools (Groq limit: 128)`);
 
         // Convert from Claude format (input_schema) to OpenAI/Groq format (parameters)
-        return claudeTools.map(tool => ({
+        return limitedTools.map(tool => ({
             type: "function",
             function: {
                 name: tool.name,
