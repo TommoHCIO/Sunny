@@ -3,6 +3,7 @@ services:
     name: sunny-bot
     runtime: node
     plan: free
+    region: oregon
     buildCommand: npm install
     startCommand: npm start
     envVars:
@@ -14,11 +15,20 @@ services:
         sync: false
       - key: DISCORD_SERVER_ID
         sync: false
-      - key: CLAUDE_API_KEY
+      # AI Provider - Groq FREE tier (no credit card needed!)
+      - key: AI_PROVIDER
+        value: groq
+      - key: GROQ_API_KEY
         sync: false
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      # Bot Configuration
       - key: MODERATION_LEVEL
         value: 2
       - key: MONGODB_URI
         sync: false
+      # Keep-alive for free tier
+      - key: ENABLE_KEEP_ALIVE
+        value: true
     autoDeploy: true
     healthCheckPath: /health
